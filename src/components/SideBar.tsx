@@ -1,5 +1,6 @@
 'use client';
 import { appPreferencesStore } from "@/store/app";
+import { authStore, formatBytes, getStoragePercentage } from "@/store/auth";
 import { useStore } from "@nanostores/react";
 import { AnimatePresence, motion } from "framer-motion";
 import { House, Settings, Users, Clock, Star, Trash2 } from "lucide-react";
@@ -14,7 +15,13 @@ interface SideBarProps {
 export default function SideBarComponent({ isMobile = false }: SideBarProps) {
     const pathname = usePathname();
     const preferences = useStore(appPreferencesStore);
+    const auth = useStore(authStore);
     const sidebarState = isMobile ? "expanded" : preferences.sidebarState;
+
+    const user = auth.user;
+    const storageUsed = formatBytes(user?.storageUsed ?? 0);
+    const storageLimit = formatBytes(user?.storageLimit ?? 5 * 1024 * 1024 * 1024);
+    const storagePercentage = getStoragePercentage(user);
 
     const triggerSidebar = () => {
         if (sidebarState === "expanded") {
@@ -115,8 +122,16 @@ export default function SideBarComponent({ isMobile = false }: SideBarProps) {
                     <div className="border-t border-base-300 mt-auto">
                         <div className="flex flex-col gap-2 p-4">
                             <p className="font-medium text-sm">Storage Used</p>
-                            <progress className="progress progress-primary w-full" value={35} max="100"></progress>
-                            <p className="text-xs opacity-70">35% of 15GB used</p>
+                            <progress 
+                                className={`progress w-full ${
+                                    storagePercentage > 90 ? 'progress-error' : 
+                                    storagePercentage > 70 ? 'progress-warning' : 
+                                    'progress-primary'
+                                }`} 
+                                value={storagePercentage} 
+                                max="100"
+                            />
+                            <p className="text-xs opacity-70">{storageUsed} of {storageLimit} used</p>
                         </div>
                     </div>
                 </div>
@@ -234,8 +249,16 @@ export default function SideBarComponent({ isMobile = false }: SideBarProps) {
                                     className="flex flex-col gap-2 w-full"
                                 >
                                     <p className="font-medium text-sm">Storage Used</p>
-                                    <progress className="progress progress-primary w-full" value={35} max="100"></progress>
-                                    <p className="text-xs opacity-70">35% of 15GB used</p>
+                                    <progress 
+                                        className={`progress w-full ${
+                                            storagePercentage > 90 ? 'progress-error' : 
+                                            storagePercentage > 70 ? 'progress-warning' : 
+                                            'progress-primary'
+                                        }`} 
+                                        value={storagePercentage} 
+                                        max="100"
+                                    />
+                                    <p className="text-xs opacity-70">{storageUsed} of {storageLimit} used</p>
                                 </motion.div>
                             ) : (
                                 <motion.div
@@ -247,12 +270,16 @@ export default function SideBarComponent({ isMobile = false }: SideBarProps) {
                                     transition={{ duration: 0.15 }}
                                 >
                                     <div
-                                        className="radial-progress text-primary text-[10px]"
-                                        style={{ "--value": 35, "--size": "2.5rem", "--thickness": "3px" } as React.CSSProperties}
+                                        className={`radial-progress text-[10px] ${
+                                            storagePercentage > 90 ? 'text-error' : 
+                                            storagePercentage > 70 ? 'text-warning' : 
+                                            'text-primary'
+                                        }`}
+                                        style={{ "--value": storagePercentage, "--size": "2.5rem", "--thickness": "3px" } as React.CSSProperties}
                                         role="progressbar"
-                                        aria-valuenow={35}
+                                        aria-valuenow={storagePercentage}
                                     >
-                                        35%
+                                        {Math.round(storagePercentage)}%
                                     </div>
                                 </motion.div>
                             )}
