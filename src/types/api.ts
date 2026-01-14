@@ -12,10 +12,34 @@ export interface AuthTokens {
     expiresIn: number;
 }
 
+/**
+ * Basic user info returned from login
+ */
 export interface User {
     id: string;
     email: string;
     cognitoId: string;
+}
+
+/**
+ * Full user profile with storage info (from /users/me endpoint)
+ */
+export interface UserProfile extends User {
+    storageUsed: number;
+    storageLimit: number;
+    metadata?: Record<string, unknown>;
+    createdAt: string;
+    updatedAt: string;
+}
+
+/**
+ * Storage info response
+ */
+export interface StorageInfo {
+    used: number;
+    limit: number;
+    available: number;
+    usedPercentage: number;
 }
 
 export interface RegisterRequest {
