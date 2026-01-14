@@ -98,7 +98,7 @@ export default function SideBarComponent({ isMobile = false }: SideBarProps) {
             <div className="relative flex flex-col gap-4 h-full w-full">
                 <div className="relative flex items-center justify-center h-16 glass shadow-sm rounded-box overflow-hidden">
                     <div className="absolute inset-0 bg-radial from-primary to-b rounded-xl blur-md opacity-20"></div>
-                    <p className="relative text-2xl font-bold z-10">Chromix</p>
+                    <p className="relative text-2xl font-bold z-10 bg-gradient-to-r from-primary to-secondary inline-block text-transparent bg-clip-text">Chrombox</p>
                 </div>
                 <div className="grow bg-base-100 shadow-sm rounded-box flex flex-col shrink-0">
                     <div className="flex-1 overflow-y-auto px-2 py-4">
@@ -185,7 +185,7 @@ export default function SideBarComponent({ isMobile = false }: SideBarProps) {
                     {sidebarState === "collapsed" ? (
                         <motion.p
                             key="collapsed-logo"
-                            className="relative text-2xl font-bold z-10"
+                            className="relative text-2xl font-bold z-10 bg-gradient-to-r from-primary to-secondary inline-block text-transparent bg-clip-text"
                             initial={{ opacity: 0, scale: 0.8 }}
                             animate={{ opacity: 1, scale: 1 }}
                             exit={{ opacity: 0, scale: 0.8 }}
@@ -196,13 +196,13 @@ export default function SideBarComponent({ isMobile = false }: SideBarProps) {
                     ) : (
                         <motion.p
                             key="expanded-logo"
-                            className="relative text-2xl font-bold z-10"
+                            className="relative text-2xl font-bold z-10 bg-gradient-to-r from-primary to-secondary inline-block text-transparent bg-clip-text"
                             initial={{ opacity: 0, scale: 0.8 }}
                             animate={{ opacity: 1, scale: 1 }}
                             exit={{ opacity: 0, scale: 0.8 }}
                             transition={{ duration: 0.15 }}
                         >
-                            Chromix
+                            Chrombox
                         </motion.p>
                     )}
                 </AnimatePresence>
