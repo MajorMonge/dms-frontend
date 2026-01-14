@@ -17,6 +17,7 @@ import RenameFolderModal from "./RenameFolderModal";
 import DeleteFolderModal from "./DeleteFolderModal";
 import RenameDocumentModal from "./RenameDocumentModal";
 import DeleteDocumentModal from "./DeleteDocumentModal";
+import BulkDeleteModal from "./BulkDeleteModal";
 import UploadModal from "./UploadModal";
 
 interface FileItem {
@@ -199,6 +200,7 @@ export default function FileBrowser() {
     const [deleteFolderItem, setDeleteFolderItem] = useState<FileItem | null>(null);
     const [renameDocumentItem, setRenameDocumentItem] = useState<FileItem | null>(null);
     const [deleteDocumentItem, setDeleteDocumentItem] = useState<FileItem | null>(null);
+    const [showDeleteSelectedConfirm, setShowDeleteSelectedConfirm] = useState(false);
 
     // Get folder ID from URL search params
     const currentFolderId = searchParams.get("folder") || undefined;
@@ -391,6 +393,26 @@ export default function FileBrowser() {
         }
     }, [files, selectedItems]);
 
+    // Handle delete selected - shows confirmation if multiple items
+    const handleDeleteSelected = useCallback(() => {
+        if (selectedItems.length === 0) return;
+        
+        // If only one item selected, directly open the appropriate modal
+        if (selectedItems.length === 1) {
+            const item = [...folders, ...files].find(i => i.id === selectedItems[0]);
+            if (item) {
+                if (item.type === 'folder') {
+                    setDeleteFolderItem(item);
+                } else {
+                    setDeleteDocumentItem(item);
+                }
+            }
+        } else {
+            // Multiple items - show bulk delete confirmation
+            setShowDeleteSelectedConfirm(true);
+        }
+    }, [selectedItems, folders, files]);
+
     const renderItems = (items: FileItem[], gridCols: string) => {
         if (items.length === 0) return null;
 
@@ -579,7 +601,10 @@ export default function FileBrowser() {
                     </div>
                     {selectedItems.length > 0 && (
                         <div className="flex gap-2">
-                            <button className="btn btn-ghost btn-sm text-error">
+                            <button 
+                                className="btn btn-ghost btn-sm text-error"
+                                onClick={handleDeleteSelected}
+                            >
                                 <TrashIcon className="h-4 w-4" /> Delete
                             </button>
                             <div className="divider divider-horizontal"></div>
@@ -603,6 +628,20 @@ export default function FileBrowser() {
                 <FileDetailsPanel
                     item={detailsItem}
                     onClose={() => setDetailsItem(null)}
+                    onRename={(item) => {
+                        if (item.type === 'folder') {
+                            setRenameFolderItem(item);
+                        } else {
+                            setRenameDocumentItem(item);
+                        }
+                    }}
+                    onDelete={(item) => {
+                        if (item.type === 'folder') {
+                            setDeleteFolderItem(item);
+                        } else {
+                            setDeleteDocumentItem(item);
+                        }
+                    }}
                 />
             )}
 
@@ -655,6 +694,20 @@ export default function FileBrowser() {
                 documentId={deleteDocumentItem?.id || ''}
                 documentName={deleteDocumentItem?.name || ''}
                 onSuccess={() => refetchDocuments()}
+            />
+
+            {/* Bulk Delete Modal */}
+            <BulkDeleteModal
+                isOpen={showDeleteSelectedConfirm}
+                onClose={() => setShowDeleteSelectedConfirm(false)}
+                items={[...folders, ...files]
+                    .filter(item => selectedItems.includes(item.id))
+                    .map(item => ({ id: item.id, name: item.name, type: item.type }))}
+                onSuccess={() => {
+                    setSelectedItems([]);
+                    refetchFolders();
+                    refetchDocuments();
+                }}
             />
         </div>
     );
