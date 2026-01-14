@@ -293,6 +293,16 @@ export function useFolderBreadcrumbs(id: string | undefined) {
 }
 
 /**
+ * Hook to get root folders (for home/root level)
+ */
+export function useRootFolders() {
+    return useQuery({
+        queryKey: [...folderKeys.all, 'root'] as const,
+        queryFn: getRootFolders,
+    });
+}
+
+/**
  * Hook to create a folder
  */
 export function useCreateFolder(options?: { onSuccess?: (folder: Folder) => void; onError?: (error: Error) => void }) {
