@@ -1,9 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../api-client';
+import { getAccessToken } from '@/store/auth';
 import type {
     Document,
     DocumentListResponse,
     DownloadUrlResponse,
+    PresignedUploadResponse,
     ApiResponse,
 } from '@/types/api';
 
@@ -64,9 +66,12 @@ export interface UpdateDocumentData {
 export async function listDocuments(params: ListDocumentsParams = {}): Promise<DocumentListResponse> {
     const searchParams = new URLSearchParams();
     
-    // Only include folderId if it's a valid ID (omit for root)
+    // For root folder (no folderId), pass 'null' to get only root-level documents
+    // If folderId is specified, use it; otherwise use 'null' for root
     if (params.folderId) {
         searchParams.set('folderId', params.folderId);
+    } else {
+        searchParams.set('folderId', 'null');
     }
     if (params.tags?.length) {
         searchParams.set('tags', params.tags.join(','));
@@ -200,6 +205,154 @@ export async function getDownloadUrl(id: string): Promise<DownloadUrlResponse> {
     }
     
     return response.data;
+}
+
+// ============= Upload API Functions =============
+
+export interface PresignedUploadRequest {
+    fileName: string;
+    mimeType: string;
+    size: number;
+    folderId?: string | null;
+}
+
+export interface ConfirmUploadRequest {
+    key: string;
+    name?: string;
+    folderId?: string | null;
+    tags?: string[];
+    metadata?: Record<string, unknown>;
+}
+
+/**
+ * Get presigned URL for direct S3 upload
+ */
+export async function getPresignedUploadUrl(data: PresignedUploadRequest): Promise<PresignedUploadResponse> {
+    const response = await apiClient<ApiResponse<PresignedUploadResponse>>('/api/v1/documents/upload/presigned', {
+        method: 'POST',
+        body: JSON.stringify(data),
+    });
+    
+    if (!response.success) {
+        throw new Error('error' in response ? response.error.message : 'Failed to get upload URL');
+    }
+    
+    return response.data;
+}
+
+/**
+ * Upload file directly to S3 using presigned URL
+ */
+export async function uploadToPresignedUrl(
+    uploadUrl: string, 
+    file: File,
+    onProgress?: (progress: number) => void
+): Promise<void> {
+    return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        
+        xhr.upload.addEventListener('progress', (event) => {
+            if (event.lengthComputable && onProgress) {
+                const progress = Math.round((event.loaded / event.total) * 100);
+                onProgress(progress);
+            }
+        });
+        
+        xhr.addEventListener('load', () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+                resolve();
+            } else {
+                reject(new Error(`Upload failed with status ${xhr.status}`));
+            }
+        });
+        
+        xhr.addEventListener('error', () => {
+            reject(new Error('Upload failed'));
+        });
+        
+        xhr.addEventListener('abort', () => {
+            reject(new Error('Upload cancelled'));
+        });
+        
+        xhr.open('PUT', uploadUrl);
+        xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+        xhr.send(file);
+    });
+}
+
+/**
+ * Confirm upload after uploading to presigned URL
+ */
+export async function confirmUpload(data: ConfirmUploadRequest): Promise<Document> {
+    const response = await apiClient<ApiResponse<Document>>('/api/v1/documents/upload/confirm', {
+        method: 'POST',
+        body: JSON.stringify(data),
+    });
+    
+    if (!response.success) {
+        throw new Error('error' in response ? response.error.message : 'Failed to confirm upload');
+    }
+    
+    return response.data;
+}
+
+/**
+ * Direct upload via multipart form data (for smaller files)
+ */
+export async function uploadDirect(
+    file: File,
+    options?: { name?: string; folderId?: string | null; tags?: string[] },
+    onProgress?: (progress: number) => void
+): Promise<Document> {
+    const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL;
+    
+    return new Promise((resolve, reject) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        if (options?.name) formData.append('name', options.name);
+        if (options?.folderId) formData.append('folderId', options.folderId);
+        if (options?.tags?.length) formData.append('tags', options.tags.join(','));
+        
+        const xhr = new XMLHttpRequest();
+        
+        xhr.upload.addEventListener('progress', (event) => {
+            if (event.lengthComputable && onProgress) {
+                const progress = Math.round((event.loaded / event.total) * 100);
+                onProgress(progress);
+            }
+        });
+        
+        xhr.addEventListener('load', () => {
+            try {
+                const response = JSON.parse(xhr.responseText);
+                if (xhr.status >= 200 && xhr.status < 300 && response.success) {
+                    resolve(response.data);
+                } else {
+                    reject(new Error(response.error?.message || 'Upload failed'));
+                }
+            } catch {
+                reject(new Error('Failed to parse response'));
+            }
+        });
+        
+        xhr.addEventListener('error', () => {
+            reject(new Error('Upload failed'));
+        });
+        
+        xhr.addEventListener('abort', () => {
+            reject(new Error('Upload cancelled'));
+        });
+        
+        xhr.open('POST', `${API_BASE_URL}/api/v1/documents/upload`);
+        
+        // Add auth header
+        const token = getAccessToken();
+        if (token) {
+            xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+        }
+        
+        xhr.send(formData);
+    });
 }
 
 /**
@@ -336,6 +489,92 @@ export function useUpdateDocument(options?: { onSuccess?: (doc: Document) => voi
             queryClient.invalidateQueries({ queryKey: documentKeys.lists() });
             queryClient.invalidateQueries({ queryKey: documentKeys.detail(doc.id) });
             options?.onSuccess?.(doc);
+        },
+        onError: options?.onError,
+    });
+}
+
+/**
+ * Hook to get trash documents
+ */
+export function useTrashDocuments(page = 1, limit = 20) {
+    return useQuery({
+        queryKey: [...documentKeys.trash(), { page, limit }] as const,
+        queryFn: () => getTrashDocuments(page, limit),
+    });
+}
+
+/**
+ * Hook to search documents
+ */
+export function useSearchDocuments(params: SearchDocumentsParams, enabled = true) {
+    return useQuery({
+        queryKey: documentKeys.search(params),
+        queryFn: () => searchDocuments(params),
+        enabled: enabled && !!(params.query || params.name || params.tags?.length || params.extension),
+    });
+}
+
+/**
+ * Hook to restore a document from trash
+ */
+export function useRestoreDocument(options?: { onSuccess?: (doc: Document) => void; onError?: (error: Error) => void }) {
+    const queryClient = useQueryClient();
+    
+    return useMutation({
+        mutationFn: restoreDocument,
+        onSuccess: (doc) => {
+            queryClient.invalidateQueries({ queryKey: documentKeys.lists() });
+            queryClient.invalidateQueries({ queryKey: documentKeys.trash() });
+            queryClient.invalidateQueries({ queryKey: documentKeys.detail(doc.id) });
+            options?.onSuccess?.(doc);
+        },
+        onError: options?.onError,
+    });
+}
+
+/**
+ * Hook to copy a document
+ */
+export function useCopyDocument(options?: { onSuccess?: (doc: Document) => void; onError?: (error: Error) => void }) {
+    const queryClient = useQueryClient();
+    
+    return useMutation({
+        mutationFn: ({ id, name, folderId }: { id: string; name?: string; folderId?: string | null }) => 
+            copyDocument(id, name, folderId),
+        onSuccess: (doc) => {
+            queryClient.invalidateQueries({ queryKey: documentKeys.lists() });
+            options?.onSuccess?.(doc);
+        },
+        onError: options?.onError,
+    });
+}
+
+/**
+ * Hook to get download URL
+ */
+export function useDownloadUrl(id: string, enabled = false) {
+    return useQuery({
+        queryKey: [...documentKeys.detail(id), 'download'] as const,
+        queryFn: () => getDownloadUrl(id),
+        enabled: enabled && !!id,
+        staleTime: 0, // Always fetch fresh URL
+        gcTime: 0, // Don't cache
+    });
+}
+
+/**
+ * Hook to empty trash
+ */
+export function useEmptyTrash(options?: { onSuccess?: (result: { deletedCount: number }) => void; onError?: (error: Error) => void }) {
+    const queryClient = useQueryClient();
+    
+    return useMutation({
+        mutationFn: emptyTrash,
+        onSuccess: (result) => {
+            queryClient.invalidateQueries({ queryKey: documentKeys.trash() });
+            queryClient.invalidateQueries({ queryKey: documentKeys.lists() });
+            options?.onSuccess?.(result);
         },
         onError: options?.onError,
     });
