@@ -206,11 +206,10 @@ export default function FileBrowser() {
     const [showDeleteSelectedConfirm, setShowDeleteSelectedConfirm] = useState(false);
     const [splitPdfItem, setSplitPdfItem] = useState<FileItem | null>(null);
 
-    // Get folder ID from URL search params
     const currentFolderId = searchParams.get("folder") || undefined;
+    const selectedFileId = searchParams.get("file") || undefined;
     const isAtRoot = !currentFolderId;
 
-    // Update URL when navigating
     const updateUrl = useCallback((folderId: string | undefined) => {
         const params = new URLSearchParams(searchParams.toString());
         if (folderId) {
@@ -250,10 +249,8 @@ export default function FileBrowser() {
         refetch: refetchDocuments 
     } = useDocuments({ folderId: currentFolderId });
 
-    // Fetch breadcrumbs for current folder
     const { data: breadcrumbsData } = useFolderBreadcrumbs(currentFolderId);
 
-    // Transform API data to FileItem format
     const folders: FileItem[] = useMemo(() => 
         (foldersData?.folders || []).map((folder): FileItem => ({
             id: folder.id,
@@ -288,6 +285,21 @@ export default function FileBrowser() {
 
     const isLoading = foldersLoading || documentsLoading;
     const error = foldersError || documentsError;
+
+    useEffect(() => {
+        if (selectedFileId && files.length > 0) {
+            const fileItem = files.find(f => f.id === selectedFileId);
+            if (fileItem) {
+                setDetailsItem(fileItem);
+                setSelectedItems([selectedFileId]);
+                
+                const params = new URLSearchParams(searchParams.toString());
+                params.delete("file");
+                const queryString = params.toString();
+                router.replace(`${pathname}${queryString ? `?${queryString}` : ""}`, { scroll: false });
+            }
+        }
+    }, [selectedFileId, files, searchParams, router, pathname]);
 
     const toggleSelect = useCallback((id: string) => {
         setSelectedItems((prev) =>
@@ -372,15 +384,12 @@ export default function FileBrowser() {
                     toast.error("Only PDF files can be split");
                 }
                 break;
-            // TODO: Implement move, star
             default:
                 toast.error(`Action "${action}" not implemented yet`);
         }
     }, []);
 
-    // Download selected files (only files, not folders)
     const handleDownloadSelected = useCallback(async () => {
-        // Filter to only files from the selection
         const selectedFiles = files.filter(f => selectedItems.includes(f.id));
         
         if (selectedFiles.length === 0) {
@@ -388,7 +397,6 @@ export default function FileBrowser() {
             return;
         }
         
-        // Start download (tracked in the indicator)
         try {
             await downloadFilesWithTracking(
                 selectedFiles.map(f => ({ 
@@ -399,16 +407,13 @@ export default function FileBrowser() {
             );
             setSelectedItems([]);
         } catch (err) {
-            // Error is already shown in the indicator
             console.error('Download failed:', err);
         }
     }, [files, selectedItems]);
 
-    // Handle delete selected - shows confirmation if multiple items
     const handleDeleteSelected = useCallback(() => {
         if (selectedItems.length === 0) return;
         
-        // If only one item selected, directly open the appropriate modal
         if (selectedItems.length === 1) {
             const item = [...folders, ...files].find(i => i.id === selectedItems[0]);
             if (item) {
@@ -419,7 +424,6 @@ export default function FileBrowser() {
                 }
             }
         } else {
-            // Multiple items - show bulk delete confirmation
             setShowDeleteSelectedConfirm(true);
         }
     }, [selectedItems, folders, files]);
