@@ -62,12 +62,10 @@ export default function CreateFolderModal({
     useEffect(() => {
         if (isOpen) {
             reset();
-            // Focus the input after a short delay to ensure modal is rendered
             setTimeout(() => setFocus("name"), 100);
         }
     }, [isOpen, reset, setFocus]);
 
-    // Handle escape key
     useEffect(() => {
         const handleEscape = (e: KeyboardEvent) => {
             if (e.key === "Escape" && isOpen) {
