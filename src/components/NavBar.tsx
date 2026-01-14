@@ -68,7 +68,7 @@ export default function NavBarComponent() {
             </label>
         </div>
         <div className="navbar-end gap-4">
-            <div className="dropdown dropdown-end flex flex-row gap-4 items-center">
+            <div className="dropdown dropdown-end flex flex-row gap-4 items-center z-99">
                 {mounted && (
                     <div className="dropdown dropdown-end">
                         <div tabIndex={0} role="button" className="btn btn-ghost btn-circle avatar placeholder">
