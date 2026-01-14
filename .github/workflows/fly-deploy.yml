@@ -12,17 +12,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: superfly/flyctl-actions/setup-flyctl@master
-      - name: Set Fly Secrets
-        run: |
-          flyctl secrets set \
-            NEXT_PUBLIC_API_URL="${{ secrets.NEXT_PUBLIC_API_URL }}" \
-            NEXT_PUBLIC_MAX_FILE_SIZE_MB="${{ env.NEXT_PUBLIC_MAX_FILE_SIZE_MB }}" \
-            NEXT_PUBLIC_ALLOWED_FILE_TYPES="${{ env.NEXT_PUBLIC_ALLOWED_FILE_TYPES }}" \
-            NODE_ENV="production" \
-            --app dms-frontendapp-prod
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
       - name: Deploy to Fly
-        run: flyctl deploy --remote-only --app dms-frontendapp-prod
+        run: |
+          flyctl deploy --remote-only --app dms-frontendapp-prod \
+            --build-arg NEXT_PUBLIC_API_URL="${{ secrets.NEXT_PUBLIC_API_URL }}" \
+            --build-arg NEXT_PUBLIC_MAX_FILE_SIZE_MB="25" \
+            --build-arg NEXT_PUBLIC_ALLOWED_FILE_TYPES="pdf,doc,docx,xls,xlsx,ppt,pptx,txt,jpg,jpeg,png,gif,csv,json,xml"
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
