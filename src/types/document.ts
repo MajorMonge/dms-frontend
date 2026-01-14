@@ -1,3 +1,8 @@
+/**
+ * @deprecated Use Document and Folder types from @/types/api instead
+ * These types are kept for backward compatibility
+ */
+
 export interface Document {
     id: string;
     name: string;
@@ -17,6 +22,9 @@ export interface Folder {
     updatedAt: Date;
 }
 
+/**
+ * @deprecated Use User type from @/types/api instead
+ */
 export interface User {
     id: string;
     email: string;
