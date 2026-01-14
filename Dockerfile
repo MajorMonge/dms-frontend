@@ -17,7 +17,7 @@ ENV NODE_ENV="production"
 FROM base AS build
 
 # Build arguments for Next.js public env vars (must be available at build time)
-ARG NEXT_PUBLIC_API_URL
+ARG NEXT_PUBLIC_API_URL=https://dms-backend-prod.fly.dev
 ARG NEXT_PUBLIC_MAX_FILE_SIZE_MB=25
 ARG NEXT_PUBLIC_ALLOWED_FILE_TYPES=pdf,doc,docx,xls,xlsx,ppt,pptx,txt,jpg,jpeg,png,gif,csv,json,xml
 
