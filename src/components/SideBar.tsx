@@ -3,7 +3,7 @@ import { appPreferencesStore } from "@/store/app";
 import { authStore, formatBytes, getStoragePercentage } from "@/store/auth";
 import { useStore } from "@nanostores/react";
 import { AnimatePresence, motion } from "framer-motion";
-import { House, Settings, Users, Clock, Star, Trash2 } from "lucide-react";
+import { House, Settings, Users, Trash2 } from "lucide-react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { closeMobileDrawer } from "./MobileDrawer";
@@ -43,8 +43,6 @@ export default function SideBarComponent({ isMobile = false }: SideBarProps) {
 
     const menuItems = [
         { label: "My Files", icon: <House size={20} />, href: "/" },
-        { label: "Recent", icon: <Clock size={20} />, href: "/recent" },
-        { label: "Starred", icon: <Star size={20} />, href: "/starred" },
         { label: "Trash", icon: <Trash2 size={20} />, href: "/trash" },
     ];
 
