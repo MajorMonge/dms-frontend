@@ -564,8 +564,8 @@ export default function FileBrowser() {
                 className={`bg-base-100 shadow-lg rounded-box flex flex-col border border-base-300 transition-all duration-300 min-h-0 ${detailsItem ? "flex-1" : "w-full"}`}
             >
                 {/* Toolbar */}
-                <div className="bg-base-200 flex items-center justify-between rounded-t-md p-4 border-b border-base-300 flex-wrap gap-2">
-                    <div className="flex gap-2">
+                <div className="bg-base-200 flex flex-wrap  items-center justify-between rounded-t-md p-4 border-b border-base-300 gap-2">
+                    <div className="basis-full lg:basis-auto flex gap-2">
                         <button 
                             className="btn btn-primary btn-sm gap-2"
                             onClick={() => setIsUploadModalOpen(true)}
@@ -581,7 +581,7 @@ export default function FileBrowser() {
                             New Folder
                         </button>
                     </div>
-                    <div className="flex gap-2 items-center">
+                    <div className="basis-full lg:basis-auto  flex gap-2 items-center justify-end">
                         {/* Sort Dropdown */}
                         <div className="dropdown dropdown-end">
                             <div tabIndex={0} role="button" className="btn btn-ghost btn-sm gap-1">
