@@ -19,7 +19,6 @@ export const folderKeys = {
     breadcrumbs: (id: string) => [...folderKeys.all, 'breadcrumbs', id] as const,
     subfolders: (id: string) => [...folderKeys.all, 'subfolders', id] as const,
     tree: (rootId?: string) => [...folderKeys.all, 'tree', rootId] as const,
-    trash: () => [...folderKeys.all, 'trash'] as const,
 };
 
 // ============= Types =============
@@ -135,20 +134,12 @@ export async function updateFolder(id: string, data: UpdateFolderData): Promise<
 }
 
 /**
- * Delete folder (soft delete)
+ * Delete folder permanently (documents inside are soft-deleted)
+ * Returns stats about deleted folders and soft-deleted documents
  */
-export async function deleteFolder(id: string): Promise<void> {
-    await apiClient<void>(`/api/v1/folders/${id}`, {
-        method: 'DELETE',
-    });
-}
-
-/**
- * Permanently delete folder
- */
-export async function deleteFolderPermanent(id: string): Promise<{ foldersDeleted: number; documentsOrphaned: number }> {
-    const response = await apiClient<ApiResponse<{ foldersDeleted: number; documentsOrphaned: number }>>(
-        `/api/v1/folders/${id}/permanent`,
+export async function deleteFolder(id: string): Promise<{ foldersDeleted: number; documentsSoftDeleted: number }> {
+    const response = await apiClient<ApiResponse<{ foldersDeleted: number; documentsSoftDeleted: number }>>(
+        `/api/v1/folders/${id}`,
         { method: 'DELETE' }
     );
     
@@ -170,21 +161,6 @@ export async function moveFolder(id: string, parentId: string | null): Promise<F
     
     if (!response.success) {
         throw new Error('error' in response ? response.error.message : 'Failed to move folder');
-    }
-    
-    return response.data;
-}
-
-/**
- * Restore folder from trash
- */
-export async function restoreFolder(id: string): Promise<Folder> {
-    const response = await apiClient<ApiResponse<Folder>>(`/api/v1/folders/${id}/restore`, {
-        method: 'POST',
-    });
-    
-    if (!response.success) {
-        throw new Error('error' in response ? response.error.message : 'Failed to restore folder');
     }
     
     return response.data;
@@ -238,21 +214,6 @@ export async function getFolderTree(rootId?: string): Promise<Folder[]> {
     
     if (!response.success) {
         throw new Error('error' in response ? response.error.message : 'Failed to fetch folder tree');
-    }
-    
-    return response.data;
-}
-
-/**
- * Get folders in trash
- */
-export async function getTrashFolders(page = 1, limit = 50): Promise<FolderListResponse> {
-    const response = await apiClient<ApiResponse<FolderListResponse>>(
-        `/api/v1/folders/trash?page=${page}&limit=${limit}`
-    );
-    
-    if (!response.success) {
-        throw new Error('error' in response ? response.error.message : 'Failed to fetch folder trash');
     }
     
     return response.data;
@@ -319,16 +280,22 @@ export function useCreateFolder(options?: { onSuccess?: (folder: Folder) => void
 }
 
 /**
- * Hook to delete a folder
+ * Hook to delete a folder (permanent deletion - documents are soft-deleted)
  */
-export function useDeleteFolder(options?: { onSuccess?: () => void; onError?: (error: Error) => void }) {
+export function useDeleteFolder(options?: { 
+    onSuccess?: (result: { foldersDeleted: number; documentsSoftDeleted: number }) => void; 
+    onError?: (error: Error) => void 
+}) {
     const queryClient = useQueryClient();
     
     return useMutation({
         mutationFn: deleteFolder,
-        onSuccess: () => {
+        onSuccess: (result) => {
             queryClient.invalidateQueries({ queryKey: folderKeys.lists() });
-            options?.onSuccess?.();
+            queryClient.invalidateQueries({ queryKey: folderKeys.all });
+            // Also invalidate documents since they may have been soft-deleted
+            queryClient.invalidateQueries({ queryKey: ['documents'] });
+            options?.onSuccess?.(result);
         },
         onError: options?.onError,
     });
@@ -362,23 +329,6 @@ export function useMoveFolder(options?: { onSuccess?: (folder: Folder) => void; 
         onSuccess: (folder) => {
             queryClient.invalidateQueries({ queryKey: folderKeys.lists() });
             queryClient.invalidateQueries({ queryKey: folderKeys.detail(folder.id) });
-            options?.onSuccess?.(folder);
-        },
-        onError: options?.onError,
-    });
-}
-
-/**
- * Hook to restore a folder from trash
- */
-export function useRestoreFolder(options?: { onSuccess?: (folder: Folder) => void; onError?: (error: Error) => void }) {
-    const queryClient = useQueryClient();
-    
-    return useMutation({
-        mutationFn: restoreFolder,
-        onSuccess: (folder) => {
-            queryClient.invalidateQueries({ queryKey: folderKeys.lists() });
-            queryClient.invalidateQueries({ queryKey: folderKeys.trash() });
             options?.onSuccess?.(folder);
         },
         onError: options?.onError,
