@@ -7,7 +7,8 @@ import { Folder as FolderIcon, File, MoreVertical, Upload, FolderPlus, Grid, Lis
 import { motion, AnimatePresence } from "framer-motion";
 import { appPreferencesStore } from "@/store/app";
 import FileDetailsPanel from "./FileDetailsPanel";
-import { useDocuments, useDeleteDocument, getDownloadUrl } from "@/lib/api/documents";
+import { useDocuments, useDeleteDocument } from "@/lib/api/documents";
+import { downloadSingleFile, downloadFilesWithTracking } from "@/lib/download";
 import { useFolders, useRootFolders, useFolderBreadcrumbs } from "@/lib/api/folders";
 import type { Document, Folder, Breadcrumb } from "@/types/api";
 import toast from "react-hot-toast";
@@ -360,10 +361,9 @@ export default function FileBrowser() {
             case "download":
                 if (item.type === "file") {
                     try {
-                        const { downloadUrl } = await getDownloadUrl(item.id);
-                        window.open(downloadUrl, '_blank');
+                        await downloadSingleFile(item.id);
                     } catch (err) {
-                        toast.error('Failed to get download URL');
+                        toast.error('Failed to download file');
                     }
                 }
                 break;
@@ -372,6 +372,32 @@ export default function FileBrowser() {
                 toast.error(`Action "${action}" not implemented yet`);
         }
     }, [deleteDocumentMutation]);
+
+    // Download selected files (only files, not folders)
+    const handleDownloadSelected = useCallback(async () => {
+        // Filter to only files from the selection
+        const selectedFiles = files.filter(f => selectedItems.includes(f.id));
+        
+        if (selectedFiles.length === 0) {
+            toast.error('No files selected for download');
+            return;
+        }
+        
+        // Start download (tracked in the indicator)
+        try {
+            await downloadFilesWithTracking(
+                selectedFiles.map(f => ({ 
+                    id: f.id, 
+                    name: f.name,
+                    size: f.size 
+                }))
+            );
+            setSelectedItems([]);
+        } catch (err) {
+            // Error is already shown in the indicator
+            console.error('Download failed:', err);
+        }
+    }, [files, selectedItems]);
 
     const renderItems = (items: FileItem[], gridCols: string) => {
         if (items.length === 0) return null;
@@ -565,8 +591,13 @@ export default function FileBrowser() {
                                 <TrashIcon className="h-4 w-4" /> Delete
                             </button>
                             <div className="divider divider-horizontal"></div>
-                            <button className="btn btn-primary btn-sm">
-                                <DownloadIcon className="h-4 w-4" /> Download
+                            <button 
+                                className="btn btn-primary btn-sm"
+                                onClick={handleDownloadSelected}
+                                disabled={!files.some(f => selectedItems.includes(f.id))}
+                            >
+                                <DownloadIcon className="h-4 w-4" />
+                                Download
                             </button>
                             <button className="btn btn-ghost btn-sm" onClick={() => setSelectedItems([])}>
                                 <BrushCleaning className="h-4 w-4" /> Clear
