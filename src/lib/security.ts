@@ -6,8 +6,6 @@ import { ROUTES } from './routes';
  */
 const ALLOWED_REDIRECT_PATHS = [
   ROUTES.HOME.path,
-  ROUTES.RECENT.path,
-  ROUTES.STARRED.path,
   ROUTES.TRASH.path,
   ROUTES.SETTINGS.path,
 ] as const;
