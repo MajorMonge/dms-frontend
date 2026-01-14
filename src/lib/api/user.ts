@@ -1,11 +1,19 @@
-import { useQuery, UseQueryOptions } from '@tanstack/react-query';
+import { useQuery, useQueryClient, UseQueryOptions } from '@tanstack/react-query';
 import { get } from '@/lib/api-client';
-import { updateUserProfile } from '@/store/auth';
+import { updateUserProfile, updateUserStorage } from '@/store/auth';
 import type { UserProfile, StorageInfo, MutationResponse } from '@/types/api';
 import { ApiClientError } from '@/lib/api-client';
 
 const STALE_TIME_USER_PROFILE = 5 * 60 * 1000;
-const STALE_TIME_STORAGE_INFO = 1 * 60 * 1000;
+const STALE_TIME_STORAGE_INFO = 30 * 1000; // 30 seconds - check more frequently
+
+// ============= Query Keys =============
+
+export const userKeys = {
+    all: ['user'] as const,
+    me: () => [...userKeys.all, 'me'] as const,
+    storage: () => [...userKeys.all, 'storage'] as const,
+};
 
 // ============= API Functions =============
 
@@ -55,7 +63,7 @@ export function useCurrentUser(
     options?: Omit<UseQueryOptions<MutationResponse<UserProfile>, ApiClientError>, 'queryKey' | 'queryFn'>
 ) {
     return useQuery<MutationResponse<UserProfile>, ApiClientError>({
-        queryKey: ['user', 'me'],
+        queryKey: userKeys.me(),
         queryFn: getCurrentUserProfile,
         staleTime: STALE_TIME_USER_PROFILE,
         ...options,
@@ -63,15 +71,36 @@ export function useCurrentUser(
 }
 
 /**
- * Hook for fetching user storage info
+ * Hook for fetching user storage info with auto-sync to store
  */
 export function useUserStorage(
     options?: Omit<UseQueryOptions<MutationResponse<StorageInfo>, ApiClientError>, 'queryKey' | 'queryFn'>
 ) {
     return useQuery<MutationResponse<StorageInfo>, ApiClientError>({
-        queryKey: ['user', 'storage'],
-        queryFn: getUserStorageInfo,
+        queryKey: userKeys.storage(),
+        queryFn: async () => {
+            const response = await getUserStorageInfo();
+            // Auto-sync storage to auth store
+            if (response.success && response.data) {
+                updateUserStorage(response.data.used);
+            }
+            return response;
+        },
         staleTime: STALE_TIME_STORAGE_INFO,
         ...options,
     });
+}
+
+/**
+ * Hook that provides a function to invalidate storage cache
+ * Call this after operations that change storage (upload, delete)
+ */
+export function useInvalidateStorage() {
+    const queryClient = useQueryClient();
+    
+    return {
+        invalidateStorage: () => {
+            queryClient.invalidateQueries({ queryKey: userKeys.storage() });
+        },
+    };
 }
