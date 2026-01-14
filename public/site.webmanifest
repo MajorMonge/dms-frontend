@@ -1,6 +1,6 @@
 {
-  "name": "Chromix",
-  "short_name": "Chromix",
+  "name": "Chrombox",
+  "short_name": "Chrombox",
   "icons": [
     {
       "src": "/web-app-manifest-192x192.png",
