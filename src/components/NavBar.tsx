@@ -1,6 +1,7 @@
 'use client';
 import { useStore } from "@nanostores/react";
 import { appPreferencesStore } from "@/store/app";
+import { authStore, getUserInitials } from "@/store/auth";
 import { useEffect, useState, useCallback } from "react";
 import { toggleMobileDrawer } from "./MobileDrawer";
 import { useLogout } from "@/lib/api/auth";
@@ -10,9 +11,13 @@ import toast from "react-hot-toast";
 
 export default function NavBarComponent() {
     const preferences = useStore(appPreferencesStore);
+    const auth = useStore(authStore);
     const theme = preferences.theme;
     const [mounted, setMounted] = useState(false);
     const router = useRouter();
+
+    const user = auth.user;
+    const initials = getUserInitials(user);
 
     const logoutMutation = useLogout({
         onSuccess: () => {
@@ -66,23 +71,33 @@ export default function NavBarComponent() {
             <div className="dropdown dropdown-end flex flex-row gap-4 items-center">
                 {mounted && (
                     <div className="dropdown dropdown-end">
-                        <div tabIndex={0} role="button" className="btn btn-ghost btn-circle avatar">
-                            <div className="w-10 rounded-full">
-                                <img
-                                    alt="Tailwind CSS Navbar component"
-                                    src="https://img.daisyui.com/images/stock/photo-1534528741775-53994a69daeb.webp" />
+                        <div tabIndex={0} role="button" className="btn btn-ghost btn-circle avatar placeholder">
+                            <div className="w-10 rounded-full bg-primary text-primary-content flex items-center justify-center">
+                                <span className="text-lg font-semibold">{initials}</span>
                             </div>
                         </div>
                         <ul
                             tabIndex={0}
-                            className="menu menu-sm dropdown-content bg-base-100 rounded-box z-1 mt-3 w-52 p-2 shadow-sm gap-2 text-base-content">
-                            <li>
-                                <a className="justify-between">
-                                    Profile
-                                </a>
+                            className="menu menu-sm dropdown-content bg-base-100 rounded-box z-1 mt-3 w-48 w-auto p-2 shadow-sm gap-1 text-base-content">
+                            <li className="menu-title pointer-events-none">
+                                <span className="text-xs text-base-content/60 truncate">
+                                    {user?.email || 'User'}
+                                </span>
                             </li>
+                            <li >
+                                <label className="label cursor-pointer text-base-content active:text-base-100" htmlFor="theme-toggle">
+                                    <input
+                                        type="checkbox"
+                                        className="toggle toggle-sm  active:border-base-100 active:bg-base-100"
+                                        checked={theme === "dim"}
+                                        onChange={changeTheme}
+                                    />
+                                    {theme === "light" ? "Light" : "Dark"} Mode
+                                </label>
+                            </li>
+                            <hr className="border-base-300" />
                             <li>
-                                <button 
+                                <button
                                     onClick={handleLogout}
                                     disabled={logoutMutation.isPending}
                                     className="justify-between"
@@ -96,18 +111,6 @@ export default function NavBarComponent() {
                                         'Logout'
                                     )}
                                 </button>
-                            </li>
-                            <hr className="border-base-300" />
-                            <li >
-                                <label className="label cursor-pointer text-base-content active:text-base-100" htmlFor="theme-toggle">
-                                    <input 
-                                        type="checkbox" 
-                                        className="toggle toggle-sm  active:border-base-100 active:bg-base-100"
-                                        checked={theme === "dim"}
-                                        onChange={changeTheme}
-                                    />
-                                    {theme === "light" ? "Light" : "Dark"} Mode
-                                </label>
                             </li>
                         </ul>
                     </div>
