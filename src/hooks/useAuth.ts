@@ -1,31 +1,137 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 import { useStore } from '@nanostores/react';
-import { authStore } from '@/store/auth';
+import { authStore, updateTokens, clearAuth } from '@/store/auth';
+import { refreshToken } from '@/lib/api/auth';
+
+// Refresh token 5 minutes before expiration
+const TOKEN_REFRESH_THRESHOLD_MS = 5 * 60 * 1000;
+// Minimum time between refresh attempts
+const MIN_REFRESH_INTERVAL_MS = 10 * 1000;
 
 /**
  * Sync auth state to cookies for middleware access
+ * and handle automatic token refresh
  */
 export function useAuthSync() {
   const auth = useStore(authStore);
+  const isRefreshing = useRef(false);
+  const lastRefreshAttempt = useRef(0);
 
+  // Token refresh function
+  const performTokenRefresh = useCallback(async () => {
+    if (!auth.tokens?.refreshToken) return false;
+    
+    // Prevent concurrent refresh attempts
+    if (isRefreshing.current) return false;
+    
+    // Rate limit refresh attempts
+    const now = Date.now();
+    if (now - lastRefreshAttempt.current < MIN_REFRESH_INTERVAL_MS) return false;
+    
+    isRefreshing.current = true;
+    lastRefreshAttempt.current = now;
+    
+    try {
+      const response = await refreshToken({ refreshToken: auth.tokens.refreshToken });
+      
+      if (response.success && response.data?.tokens) {
+        updateTokens(response.data.tokens);
+        // Clear the refresh needed flag
+        document.cookie = 'tokenNeedsRefresh=; path=/; max-age=0';
+        return true;
+      } else {
+        // Refresh failed, clear auth
+        console.error('Token refresh failed:', response.error?.message);
+        clearAuth();
+        return false;
+      }
+    } catch (error) {
+      console.error('Token refresh error:', error);
+      // Don't clear auth on network errors - let user retry
+      return false;
+    } finally {
+      isRefreshing.current = false;
+    }
+  }, [auth.tokens?.refreshToken]);
+
+  // Sync tokens to cookies
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    // Sync access token to cookie
     if (auth.tokens?.accessToken) {
-      document.cookie = `accessToken=${auth.tokens.accessToken}; path=/; max-age=${auth.tokens.expiresIn || 3600}; SameSite=Lax`;
+      const expiresIn = auth.tokens.expiresIn || 3600;
+      const expiresAt = Date.now() + (expiresIn * 1000);
       
-      // Store auth state as cookie for middleware
+      // Store access token
+      document.cookie = `accessToken=${auth.tokens.accessToken}; path=/; max-age=${expiresIn}; SameSite=Lax`;
+      
+      // Store refresh token (longer lived)
+      if (auth.tokens.refreshToken) {
+        // Refresh tokens typically last 30 days
+        document.cookie = `refreshToken=${auth.tokens.refreshToken}; path=/; max-age=${30 * 24 * 60 * 60}; SameSite=Lax`;
+      }
+      
+      // Store token expiration timestamp for middleware
+      document.cookie = `tokenExpiresAt=${expiresAt}; path=/; max-age=${expiresIn}; SameSite=Lax`;
+      
+      // Store full auth state for middleware
       const authData = encodeURIComponent(JSON.stringify(auth));
-      document.cookie = `auth=${authData}; path=/; max-age=${auth.tokens.expiresIn || 3600}; SameSite=Lax`;
+      document.cookie = `auth=${authData}; path=/; max-age=${expiresIn}; SameSite=Lax`;
     } else {
-      // Clear cookies on logout
+      // Clear all auth cookies on logout
       document.cookie = 'accessToken=; path=/; max-age=0';
+      document.cookie = 'refreshToken=; path=/; max-age=0';
+      document.cookie = 'tokenExpiresAt=; path=/; max-age=0';
       document.cookie = 'auth=; path=/; max-age=0';
+      document.cookie = 'tokenNeedsRefresh=; path=/; max-age=0';
     }
   }, [auth]);
+
+  // Check for middleware refresh signal
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
+    const checkRefreshFlag = () => {
+      const cookies = document.cookie.split(';');
+      const needsRefresh = cookies.some(c => c.trim().startsWith('tokenNeedsRefresh=true'));
+      
+      if (needsRefresh && auth.tokens?.refreshToken) {
+        performTokenRefresh();
+      }
+    };
+    
+    // Check on mount
+    checkRefreshFlag();
+    
+    // Also check periodically in case middleware sets the flag
+    const interval = setInterval(checkRefreshFlag, 5000);
+    
+    return () => clearInterval(interval);
+  }, [auth.tokens?.refreshToken, performTokenRefresh]);
+
+  // Proactive token refresh before expiration
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!auth.tokens?.accessToken || !auth.tokens?.expiresIn) return;
+
+    const expiresAt = Date.now() + (auth.tokens.expiresIn * 1000);
+    const timeUntilRefresh = expiresAt - Date.now() - TOKEN_REFRESH_THRESHOLD_MS;
+    
+    if (timeUntilRefresh <= 0) {
+      // Token already needs refresh
+      performTokenRefresh();
+      return;
+    }
+
+    // Schedule refresh before token expires
+    const timeoutId = setTimeout(() => {
+      performTokenRefresh();
+    }, timeUntilRefresh);
+
+    return () => clearTimeout(timeoutId);
+  }, [auth.tokens?.accessToken, auth.tokens?.expiresIn, performTokenRefresh]);
 }
 
 /**
