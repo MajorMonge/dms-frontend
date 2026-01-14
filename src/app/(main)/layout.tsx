@@ -21,16 +21,9 @@ export default function MainLayout({
                         <SideBarComponent />
                     </div>
 
-                    <div className="flex lg:hidden flex-col flex-1 gap-4 min-w-0 h-full">
-                        <NavBarComponent />
-                        <main className="flex-1 min-h-0">
-                            <PageTransition>{children}</PageTransition>
-                        </main>
-                    </div>
-
                     <MobileDrawer />
 
-                    <div className="hidden lg:flex flex-col flex-1 gap-4 min-w-0 h-full">
+                    <div className="flex flex-col flex-1 gap-4 min-w-0 h-full">
                         <NavBarComponent />
                         <main className="flex-1 min-h-0">
                             <PageTransition>{children}</PageTransition>
