@@ -3,7 +3,7 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { useStore } from "@nanostores/react";
-import { Folder as FolderIcon, File, MoreVertical, Upload, FolderPlus, Grid, List, HomeIcon, TrashIcon, DownloadIcon, BrushCleaning, Star, Pencil, FolderInput, Loader2, AlertCircle } from "lucide-react";
+import { Folder as FolderIcon, File, MoreVertical, Upload, FolderPlus, Grid, List, HomeIcon, TrashIcon, DownloadIcon, BrushCleaning, Star, Pencil, FolderInput, Loader2, AlertCircle, Scissors } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { appPreferencesStore } from "@/store/app";
 import FileDetailsPanel from "./FileDetailsPanel";
@@ -19,6 +19,7 @@ import RenameDocumentModal from "./RenameDocumentModal";
 import DeleteDocumentModal from "./DeleteDocumentModal";
 import BulkDeleteModal from "./BulkDeleteModal";
 import UploadModal from "./UploadModal";
+import SplitPdfModal from "./SplitPdfModal";
 
 interface FileItem {
     id: string;
@@ -77,6 +78,7 @@ function ItemDropdown({ item, onAction }: { item: FileItem; onAction?: (action: 
     };
 
     const isFolder = item.type === "folder";
+    const isPdf = !isFolder && item.extension?.toLowerCase() === "pdf";
 
     return (
         <div className="dropdown dropdown-end" onClick={(e) => e.stopPropagation()}>
@@ -89,6 +91,7 @@ function ItemDropdown({ item, onAction }: { item: FileItem; onAction?: (action: 
                 <li><a onClick={handleClick("move")}><FolderInput className="h-4 w-4" /> Move</a></li>
                 {!isFolder && <li><a onClick={handleClick("star")}><Star className="h-4 w-4" /> Star</a></li>}
                 {!isFolder && <li><a onClick={handleClick("download")}><DownloadIcon className="h-4 w-4" /> Download</a></li>}
+                {isPdf && <li><a onClick={handleClick("split")}><Scissors className="h-4 w-4" /> Split PDF</a></li>}
                 <li className="border-t border-base-300 mt-1 pt-1">
                     <a onClick={handleClick("delete")} className="text-error"><TrashIcon className="h-4 w-4" /> Delete</a>
                 </li>
@@ -201,6 +204,7 @@ export default function FileBrowser() {
     const [renameDocumentItem, setRenameDocumentItem] = useState<FileItem | null>(null);
     const [deleteDocumentItem, setDeleteDocumentItem] = useState<FileItem | null>(null);
     const [showDeleteSelectedConfirm, setShowDeleteSelectedConfirm] = useState(false);
+    const [splitPdfItem, setSplitPdfItem] = useState<FileItem | null>(null);
 
     // Get folder ID from URL search params
     const currentFolderId = searchParams.get("folder") || undefined;
@@ -359,6 +363,13 @@ export default function FileBrowser() {
                     } catch (err) {
                         toast.error('Failed to download file');
                     }
+                }
+                break;
+            case "split":
+                if (item.type === "file" && item.extension?.toLowerCase() === "pdf") {
+                    setSplitPdfItem(item);
+                } else {
+                    toast.error("Only PDF files can be split");
                 }
                 break;
             // TODO: Implement move, star
@@ -642,6 +653,11 @@ export default function FileBrowser() {
                             setDeleteDocumentItem(item);
                         }
                     }}
+                    onSplitPdf={(item) => {
+                        if (item.type === 'file' && item.extension?.toLowerCase() === 'pdf') {
+                            setSplitPdfItem(item);
+                        }
+                    }}
                 />
             )}
 
@@ -708,6 +724,16 @@ export default function FileBrowser() {
                     refetchFolders();
                     refetchDocuments();
                 }}
+            />
+
+            {/* Split PDF Modal */}
+            <SplitPdfModal
+                isOpen={!!splitPdfItem}
+                onClose={() => setSplitPdfItem(null)}
+                documentId={splitPdfItem?.id || ''}
+                documentName={splitPdfItem?.name || ''}
+                folderId={currentFolderId}
+                onSuccess={() => refetchDocuments()}
             />
         </div>
     );
