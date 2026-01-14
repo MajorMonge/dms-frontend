@@ -7,6 +7,7 @@ import { House, Settings, Users, Clock, Star, Trash2 } from "lucide-react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { closeMobileDrawer } from "./MobileDrawer";
+import { useUserStorage } from "@/lib/api/user";
 
 interface SideBarProps {
     isMobile?: boolean;
@@ -17,6 +18,9 @@ export default function SideBarComponent({ isMobile = false }: SideBarProps) {
     const preferences = useStore(appPreferencesStore);
     const auth = useStore(authStore);
     const sidebarState = isMobile ? "expanded" : preferences.sidebarState;
+
+    // Fetch and sync storage info - this will update authStore automatically
+    useUserStorage({ enabled: auth.isAuthenticated });
 
     const user = auth.user;
     const storageUsed = formatBytes(user?.storageUsed ?? 0);
