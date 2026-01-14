@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { X, AlertTriangle, Loader2, Trash2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useDeleteDocument } from "@/lib/api/documents";
@@ -20,9 +21,11 @@ export default function DeleteDocumentModal({
     documentName,
     onSuccess,
 }: DeleteDocumentModalProps) {
+    const [isPermanent, setIsPermanent] = useState(false);
+    
     const deleteDocument = useDeleteDocument({
         onSuccess: () => {
-            toast.success("Document moved to trash");
+            toast.success(isPermanent ? "Document permanently deleted" : "Document moved to trash");
             onClose();
             onSuccess?.();
         },
@@ -34,7 +37,7 @@ export default function DeleteDocumentModal({
     });
 
     const handleDelete = () => {
-        deleteDocument.mutate({ id: documentId });
+        deleteDocument.mutate({ id: documentId, permanent: isPermanent });
     };
 
     // Handle escape key
@@ -94,11 +97,39 @@ export default function DeleteDocumentModal({
                                     Are you sure you want to delete{" "}
                                     <span className="font-semibold text-base-content">"{documentName}"</span>?
                                 </p>
-                                <div className="mt-4 p-3 bg-info/10 border border-info/20 rounded-lg">
-                                    <p className="text-sm text-info-content">
-                                        <strong>Note:</strong> The document will be moved to trash. You can restore it within 30 days.
-                                    </p>
+                                
+                                {/* Permanent deletion checkbox */}
+                                <div className="form-control mt-4">
+                                    <label className="label cursor-pointer justify-start gap-3 p-3 border border-base-300 rounded-lg hover:bg-base-200 transition-colors">
+                                        <input 
+                                            type="checkbox" 
+                                            className="checkbox checkbox-error" 
+                                            checked={isPermanent}
+                                            onChange={(e) => setIsPermanent(e.target.checked)}
+                                            disabled={deleteDocument.isPending}
+                                        />
+                                        <div className="flex-1">
+                                            <span className="label-text font-medium">Delete permanently</span>
+                                            <p className="text-xs text-base-content/60 mt-0.5">
+                                                Cannot be restored if permanently deleted
+                                            </p>
+                                        </div>
+                                    </label>
                                 </div>
+                                
+                                {isPermanent ? (
+                                    <div className="mt-4 p-3 bg-error/10 border border-error/20 rounded-lg">
+                                        <p className="text-sm text-error-content">
+                                            <strong>Warning:</strong> This document will be permanently deleted and cannot be restored.
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <div className="mt-4 p-3 bg-info/10 border border-info/20 rounded-lg">
+                                        <p className="text-sm text-info-content">
+                                            <strong>Note:</strong> The document will be moved to trash. You can restore it within 30 days.
+                                        </p>
+                                    </div>
+                                )}
                             </div>
 
                             {/* Actions */}
