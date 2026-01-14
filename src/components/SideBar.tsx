@@ -8,6 +8,7 @@ import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { closeMobileDrawer } from "./MobileDrawer";
 import { useUserStorage } from "@/lib/api/user";
+import { useState, useEffect } from "react";
 
 interface SideBarProps {
     isMobile?: boolean;
@@ -18,6 +19,12 @@ export default function SideBarComponent({ isMobile = false }: SideBarProps) {
     const preferences = useStore(appPreferencesStore);
     const auth = useStore(authStore);
     const sidebarState = isMobile ? "expanded" : preferences.sidebarState;
+    const [isMounted, setIsMounted] = useState(false);
+
+    // Prevent hydration mismatch by only showing storage after mount
+    useEffect(() => {
+        setIsMounted(true);
+    }, []);
 
     // Fetch and sync storage info - this will update authStore automatically
     useUserStorage({ enabled: auth.isAuthenticated });
@@ -257,10 +264,12 @@ export default function SideBarComponent({ isMobile = false }: SideBarProps) {
                                             storagePercentage > 70 ? 'progress-warning' : 
                                             'progress-primary'
                                         }`} 
-                                        value={storagePercentage} 
+                                        value={isMounted ? storagePercentage : 0} 
                                         max="100"
                                     />
-                                    <p className="text-xs opacity-70">{storageUsed} of {storageLimit} used</p>
+                                    <p className="text-xs opacity-70">
+                                        {isMounted ? `${storageUsed} of ${storageLimit} used` : 'Loading...'}
+                                    </p>
                                 </motion.div>
                             ) : (
                                 <motion.div
@@ -277,11 +286,11 @@ export default function SideBarComponent({ isMobile = false }: SideBarProps) {
                                             storagePercentage > 70 ? 'text-warning' : 
                                             'text-primary'
                                         }`}
-                                        style={{ "--value": storagePercentage, "--size": "2.5rem", "--thickness": "3px" } as React.CSSProperties}
+                                        style={{ "--value": isMounted ? storagePercentage : 0, "--size": "2.5rem", "--thickness": "3px" } as React.CSSProperties}
                                         role="progressbar"
-                                        aria-valuenow={storagePercentage}
+                                        aria-valuenow={isMounted ? storagePercentage : 0}
                                     >
-                                        {Math.round(storagePercentage)}%
+                                        {isMounted ? `${Math.round(storagePercentage)}%` : '...'}
                                     </div>
                                 </motion.div>
                             )}
