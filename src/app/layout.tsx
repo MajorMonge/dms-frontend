@@ -1,6 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import { Montserrat } from "next/font/google";
 import { appPreferencesStore } from "@/store/app";
+import { QueryProvider } from "@/components/QueryProvider";
+import { AuthSync } from "@/components/AuthSync";
+import { Toaster } from 'react-hot-toast';
 import "@/styles/globals.scss";
 
 const getMontserrat = Montserrat({
@@ -38,7 +41,12 @@ export default function RootLayout({
       <body
         className={`${getMontserrat.variable} antialiased h-screen overflow-hidden`}
       >
-        {children}
+        <QueryProvider>
+          <AuthSync>
+            {children}
+          </AuthSync>
+        </QueryProvider>
+        <Toaster />
       </body>
     </html>
   );
