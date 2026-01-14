@@ -93,6 +93,7 @@ export async function apiClient<T>(
         const response = await fetch(url, {
             ...fetchOptions,
             headers: requestHeaders,
+            cache: 'no-store',
         });
 
         // Handle 401 Unauthorized - attempt token refresh
@@ -111,6 +112,11 @@ export async function apiClient<T>(
                     headers: requestHeaders,
                 });
                 
+                // Handle empty response (204 No Content)
+                if (retryResponse.status === 204 || retryResponse.headers.get('content-length') === '0') {
+                    return undefined as T;
+                }
+                
                 const retryData = await retryResponse.json();
                 return retryData;
             } else {
@@ -121,6 +127,11 @@ export async function apiClient<T>(
                     401
                 );
             }
+        }
+
+        // Handle empty response (204 No Content)
+        if (response.status === 204 || response.headers.get('content-length') === '0') {
+            return undefined as T;
         }
 
         const data = await response.json();
