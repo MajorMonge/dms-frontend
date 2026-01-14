@@ -16,6 +16,7 @@ import {
     RotateCcw,
     Trash2,
     Package,
+    Scissors,
 } from "lucide-react";
 import {
     uploadStore,
@@ -30,6 +31,12 @@ import {
     clearCompletedDownloads,
     getTotalDownloadProgress,
 } from "@/store/downloads";
+import {
+    processingStore,
+    removeProcessingTask,
+    clearCompletedProcessing,
+    getTotalProcessingProgress,
+} from "@/store/processing";
 
 function formatFileSize(bytes: number): string {
     if (bytes === 0) return "0 B";
@@ -77,10 +84,11 @@ function getExtension(filename: string): string {
 export default function TransferIndicator() {
     const { uploads, isUploading } = useStore(uploadStore);
     const { downloads, isDownloading } = useStore(downloadStore);
+    const { items: processingItems, isProcessing } = useStore(processingStore);
     const [isExpanded, setIsExpanded] = useState(true);
 
     // Only show if there are transfers
-    const hasTransfers = uploads.length > 0 || downloads.length > 0;
+    const hasTransfers = uploads.length > 0 || downloads.length > 0 || processingItems.length > 0;
     if (!hasTransfers) {
         return null;
     }
@@ -101,20 +109,31 @@ export default function TransferIndicator() {
     const downloadErrorCount = downloads.filter((d) => d.status === "error").length;
     const downloadProgress = getTotalDownloadProgress();
 
+    // Processing stats
+    const processingActiveCount = processingItems.filter(
+        (p) => p.status === "pending" || p.status === "processing"
+    ).length;
+    const processingCompletedCount = processingItems.filter((p) => p.status === "completed").length;
+    const processingErrorCount = processingItems.filter((p) => p.status === "error").length;
+    const processingProgress = getTotalProcessingProgress();
+
     // Combined stats
-    const isActive = isUploading || isDownloading;
-    const totalCompleted = uploadCompletedCount + downloadCompletedCount;
-    const totalErrors = uploadErrorCount + downloadErrorCount;
+    const isActive = isUploading || isDownloading || isProcessing;
+    const totalCompleted = uploadCompletedCount + downloadCompletedCount + processingCompletedCount;
+    const totalErrors = uploadErrorCount + downloadErrorCount + processingErrorCount;
 
     // Overall progress (weighted average)
+    const totalActiveCount = uploadActiveCount + downloadActiveCount + processingActiveCount;
     const totalProgress = isActive
         ? Math.round(
-            (uploadActiveCount * uploadProgress + downloadActiveCount * downloadProgress) /
-            Math.max(uploadActiveCount + downloadActiveCount, 1)
+            (uploadActiveCount * uploadProgress + 
+             downloadActiveCount * downloadProgress + 
+             processingActiveCount * processingProgress) /
+            Math.max(totalActiveCount, 1)
           )
         : 100;
 
-    const getStatusIcon = (status: string, type: "upload" | "download") => {
+    const getStatusIcon = (status: string, type: "upload" | "download" | "processing") => {
         switch (status) {
             case "completed":
                 return <CheckCircle2 className="h-4 w-4 text-success" />;
@@ -123,6 +142,7 @@ export default function TransferIndicator() {
             case "uploading":
             case "downloading":
             case "zipping":
+            case "processing":
                 return <Loader2 className="h-4 w-4 text-primary animate-spin" />;
             default:
                 return <div className="h-4 w-4 rounded-full border-2 border-base-300" />;
@@ -137,6 +157,9 @@ export default function TransferIndicator() {
         }
         if (downloadActiveCount > 0) {
             parts.push(`Downloading ${downloadActiveCount}`);
+        }
+        if (processingActiveCount > 0) {
+            parts.push(`Processing ${processingActiveCount}`);
         }
         
         if (parts.length > 0) {
@@ -156,6 +179,7 @@ export default function TransferIndicator() {
         e.stopPropagation();
         clearCompletedUploads();
         clearCompletedDownloads();
+        clearCompletedProcessing();
     };
 
     return (
@@ -175,6 +199,7 @@ export default function TransferIndicator() {
                         <div className="relative flex items-center gap-1">
                             {isUploading && <Upload className="h-4 w-4 text-primary" />}
                             {isDownloading && <Download className="h-4 w-4 text-secondary" />}
+                            {isProcessing && <Scissors className="h-4 w-4 text-accent" />}
                             <motion.div
                                 className="absolute -top-1 -right-1 h-2 w-2 bg-primary rounded-full"
                                 animate={{ scale: [1, 1.2, 1] }}
@@ -357,6 +382,67 @@ export default function TransferIndicator() {
                                         {(download.status === "completed" || download.status === "error") && (
                                             <button
                                                 onClick={() => removeDownload(download.id)}
+                                                className="btn btn-ghost btn-xs btn-square"
+                                                title="Remove"
+                                            >
+                                                <X className="h-3 w-3" />
+                                            </button>
+                                        )}
+                                    </div>
+                                </motion.div>
+                            ))}
+
+                            {/* Processing Tasks */}
+                            {processingItems.map((task) => (
+                                <motion.div
+                                    key={`processing-${task.id}`}
+                                    layout
+                                    initial={{ opacity: 0, x: -20 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    exit={{ opacity: 0, x: 20 }}
+                                    className="flex items-center gap-2 p-2 border-b border-base-200 last:border-b-0 hover:bg-base-200/50"
+                                >
+                                    <div className="relative">
+                                        <Scissors className="h-5 w-5 text-accent" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-sm truncate">{task.documentName}</p>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xs text-base-content/50 capitalize">
+                                                Split ({task.mode || "all"})
+                                            </span>
+                                            {task.status === "processing" && (
+                                                <span className="text-xs text-accent">
+                                                    Processing...
+                                                </span>
+                                            )}
+                                            {task.status === "completed" && task.outputCount && (
+                                                <span className="text-xs text-success">
+                                                    {task.outputCount} files created
+                                                </span>
+                                            )}
+                                            {task.status === "error" && (
+                                                <span className="text-xs text-error truncate">
+                                                    {task.error}
+                                                </span>
+                                            )}
+                                        </div>
+                                        {task.status === "processing" && (
+                                            <div className="mt-1 h-1 bg-base-200 rounded-full overflow-hidden">
+                                                <motion.div
+                                                    className="h-full bg-accent"
+                                                    initial={{ width: "5%" }}
+                                                    animate={{ width: "90%" }}
+                                                    transition={{ duration: 30, ease: "linear" }}
+                                                />
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                        {getStatusIcon(task.status, "processing")}
+                                        {(task.status === "completed" || task.status === "error") && (
+                                            <button
+                                                onClick={() => removeProcessingTask(task.id)}
                                                 className="btn btn-ghost btn-xs btn-square"
                                                 title="Remove"
                                             >
