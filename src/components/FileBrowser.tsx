@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { useStore } from "@nanostores/react";
-import { Folder as FolderIcon, File, MoreVertical, Upload, FolderPlus, Grid, List, HomeIcon, TrashIcon, DownloadIcon, BrushCleaning, Star, Pencil, FolderInput, Loader2, AlertCircle, Scissors } from "lucide-react";
+import { Folder as FolderIcon, File, MoreVertical, Upload, FolderPlus, Grid, List, HomeIcon, TrashIcon, DownloadIcon, BrushCleaning, Star, Pencil, FolderInput, Loader2, AlertCircle, Scissors, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { appPreferencesStore } from "@/store/app";
 import FileDetailsPanel from "./FileDetailsPanel";
-import { useDocuments } from "@/lib/api/documents";
+import { useInfiniteDocuments, type ListDocumentsParams } from "@/lib/api/documents";
 import { downloadSingleFile, downloadFilesWithTracking } from "@/lib/download";
 import { useFolders, useRootFolders, useFolderBreadcrumbs } from "@/lib/api/folders";
 import type { Document, Folder, Breadcrumb } from "@/types/api";
@@ -20,6 +20,16 @@ import DeleteDocumentModal from "./DeleteDocumentModal";
 import BulkDeleteModal from "./BulkDeleteModal";
 import UploadModal from "./UploadModal";
 import SplitPdfModal from "./SplitPdfModal";
+
+// Sort options type
+type SortField = 'name' | 'updatedAt' | 'size' | 'createdAt';
+type SortOrder = 'asc' | 'desc';
+
+interface SortOption {
+    field: SortField;
+    order: SortOrder;
+    label: string;
+}
 
 interface FileItem {
     id: string;
@@ -187,6 +197,7 @@ export default function FileBrowser() {
     const router = useRouter();
     const pathname = usePathname();
     const searchParams = useSearchParams();
+    const loadMoreRef = useRef<HTMLDivElement>(null);
     
     const preferences = useStore(appPreferencesStore);
     const viewMode = preferences.viewMode;
@@ -205,6 +216,10 @@ export default function FileBrowser() {
     const [deleteDocumentItem, setDeleteDocumentItem] = useState<FileItem | null>(null);
     const [showDeleteSelectedConfirm, setShowDeleteSelectedConfirm] = useState(false);
     const [splitPdfItem, setSplitPdfItem] = useState<FileItem | null>(null);
+    
+    // Sorting state
+    const [sortBy, setSortBy] = useState<SortField>('name');
+    const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
 
     const currentFolderId = searchParams.get("folder") || undefined;
     const selectedFileId = searchParams.get("file") || undefined;
@@ -242,17 +257,27 @@ export default function FileBrowser() {
     const foldersError = isAtRoot ? rootFoldersError : subFoldersError;
     const refetchFolders = isAtRoot ? refetchRootFolders : refetchSubFolders;
     
+    // Use infinite query for documents with sorting
     const { 
         data: documentsData, 
         isLoading: documentsLoading, 
         error: documentsError,
-        refetch: refetchDocuments 
-    } = useDocuments({ folderId: currentFolderId });
+        refetch: refetchDocuments,
+        fetchNextPage,
+        hasNextPage,
+        isFetchingNextPage,
+    } = useInfiniteDocuments({ 
+        folderId: currentFolderId,
+        sortBy,
+        sortOrder,
+        limit: 30,
+    });
 
     const { data: breadcrumbsData } = useFolderBreadcrumbs(currentFolderId);
 
-    const folders: FileItem[] = useMemo(() => 
-        (foldersData?.folders || []).map((folder): FileItem => ({
+    // Sort folders client-side to match document sorting
+    const folders: FileItem[] = useMemo(() => {
+        const folderItems = (foldersData?.folders || []).map((folder): FileItem => ({
             id: folder.id,
             name: folder.name,
             type: "folder",
@@ -262,29 +287,94 @@ export default function FileBrowser() {
                 year: 'numeric' 
             }),
             originalData: folder,
-        })),
-        [foldersData]
-    );
+        }));
+        
+        // Sort folders
+        return folderItems.sort((a, b) => {
+            const folderA = a.originalData as Folder;
+            const folderB = b.originalData as Folder;
+            
+            let comparison = 0;
+            switch (sortBy) {
+                case 'name':
+                    comparison = a.name.localeCompare(b.name);
+                    break;
+                case 'updatedAt':
+                    comparison = new Date(folderA.updatedAt).getTime() - new Date(folderB.updatedAt).getTime();
+                    break;
+                case 'createdAt':
+                    comparison = new Date(folderA.createdAt).getTime() - new Date(folderB.createdAt).getTime();
+                    break;
+                case 'size':
+                    // Folders don't have size, sort by name
+                    comparison = a.name.localeCompare(b.name);
+                    break;
+            }
+            return sortOrder === 'asc' ? comparison : -comparison;
+        });
+    }, [foldersData, sortBy, sortOrder]);
 
-    const files: FileItem[] = useMemo(() => 
-        (documentsData?.documents || []).map((doc): FileItem => ({
-            id: doc.id,
-            name: doc.name,
-            type: "file",
-            size: doc.size,
-            extension: doc.extension,
-            modified: new Date(doc.updatedAt).toLocaleDateString('en-US', { 
-                month: 'short', 
-                day: 'numeric', 
-                year: 'numeric' 
-            }),
-            originalData: doc,
-        })),
-        [documentsData]
-    );
+    // Flatten infinite query pages into single array
+    const files: FileItem[] = useMemo(() => {
+        if (!documentsData?.pages) return [];
+        
+        return documentsData.pages.flatMap(page => 
+            page.documents.map((doc): FileItem => ({
+                id: doc.id,
+                name: doc.name,
+                type: "file",
+                size: doc.size,
+                extension: doc.extension,
+                modified: new Date(doc.updatedAt).toLocaleDateString('en-US', { 
+                    month: 'short', 
+                    day: 'numeric', 
+                    year: 'numeric' 
+                }),
+                originalData: doc,
+            }))
+        );
+    }, [documentsData]);
 
     const isLoading = foldersLoading || documentsLoading;
     const error = foldersError || documentsError;
+
+    // Infinite scroll observer
+    useEffect(() => {
+        const observer = new IntersectionObserver(
+            (entries) => {
+                if (entries[0].isIntersecting && hasNextPage && !isFetchingNextPage) {
+                    fetchNextPage();
+                }
+            },
+            { threshold: 0.1 }
+        );
+
+        if (loadMoreRef.current) {
+            observer.observe(loadMoreRef.current);
+        }
+
+        return () => observer.disconnect();
+    }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+    // Handle sorting change
+    const handleSortChange = useCallback((field: SortField) => {
+        if (sortBy === field) {
+            // Toggle order if same field
+            setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+        } else {
+            setSortBy(field);
+            // Default order based on field type
+            setSortOrder(field === 'name' ? 'asc' : 'desc');
+        }
+    }, [sortBy]);
+
+    // Get sort icon
+    const getSortIcon = (field: SortField) => {
+        if (sortBy !== field) return <ArrowUpDown className="h-3 w-3 opacity-50" />;
+        return sortOrder === 'asc' 
+            ? <ArrowUp className="h-3 w-3" /> 
+            : <ArrowDown className="h-3 w-3" />;
+    };
 
     useEffect(() => {
         if (selectedFileId && files.length > 0) {
@@ -474,7 +564,7 @@ export default function FileBrowser() {
                 className={`bg-base-100 shadow-lg rounded-box flex flex-col border border-base-300 transition-all duration-300 min-h-0 ${detailsItem ? "flex-1" : "w-full"}`}
             >
                 {/* Toolbar */}
-                <div className="bg-base-200 flex items-center justify-between rounded-t-md p-4 border-b border-base-300">
+                <div className="bg-base-200 flex items-center justify-between rounded-t-md p-4 border-b border-base-300 flex-wrap gap-2">
                     <div className="flex gap-2">
                         <button 
                             className="btn btn-primary btn-sm gap-2"
@@ -491,7 +581,57 @@ export default function FileBrowser() {
                             New Folder
                         </button>
                     </div>
-                    <div className="flex gap-1">
+                    <div className="flex gap-2 items-center">
+                        {/* Sort Dropdown */}
+                        <div className="dropdown dropdown-end">
+                            <div tabIndex={0} role="button" className="btn btn-ghost btn-sm gap-1">
+                                <ArrowUpDown className="h-4 w-4" />
+                                <span className="hidden sm:inline">Sort</span>
+                                <ChevronDown className="h-3 w-3" />
+                            </div>
+                            <ul tabIndex={0} className="dropdown-content menu bg-base-100 rounded-box z-10 w-48 p-2 shadow-lg border border-base-300">
+                                <li>
+                                    <a 
+                                        onClick={() => handleSortChange('name')}
+                                        className={sortBy === 'name' ? 'active' : ''}
+                                    >
+                                        {getSortIcon('name')}
+                                        Name
+                                    </a>
+                                </li>
+                                <li>
+                                    <a 
+                                        onClick={() => handleSortChange('updatedAt')}
+                                        className={sortBy === 'updatedAt' ? 'active' : ''}
+                                    >
+                                        {getSortIcon('updatedAt')}
+                                        Modified
+                                    </a>
+                                </li>
+                                <li>
+                                    <a 
+                                        onClick={() => handleSortChange('createdAt')}
+                                        className={sortBy === 'createdAt' ? 'active' : ''}
+                                    >
+                                        {getSortIcon('createdAt')}
+                                        Created
+                                    </a>
+                                </li>
+                                <li>
+                                    <a 
+                                        onClick={() => handleSortChange('size')}
+                                        className={sortBy === 'size' ? 'active' : ''}
+                                    >
+                                        {getSortIcon('size')}
+                                        Size
+                                    </a>
+                                </li>
+                            </ul>
+                        </div>
+                        
+                        <div className="divider divider-horizontal m-0 h-6"></div>
+                        
+                        {/* View Mode */}
                         <button
                             className={`btn btn-ghost btn-sm btn-square ${viewMode === "grid" ? "btn-active" : ""}`}
                             onClick={() => setViewMode("grid")}
@@ -599,6 +739,24 @@ export default function FileBrowser() {
                                     {renderItems(files, "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-8")}
                                 </div>
                             )}
+
+                            {/* Infinite scroll trigger */}
+                            <div 
+                                ref={loadMoreRef} 
+                                className="h-10 flex items-center justify-center"
+                            >
+                                {isFetchingNextPage && (
+                                    <div className="flex items-center gap-2 text-base-content/60">
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                        <span className="text-sm">Loading more...</span>
+                                    </div>
+                                )}
+                                {!hasNextPage && files.length > 0 && (
+                                    <span className="text-xs text-base-content/40">
+                                        All files loaded
+                                    </span>
+                                )}
+                            </div>
                         </>
                     )}
                 </div>
