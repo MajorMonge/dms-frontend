@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from '@tanstack/react-query';
 import { apiClient } from '../api-client';
 import { getAccessToken } from '@/store/auth';
 import { folderKeys } from './folders';
@@ -446,6 +446,26 @@ export function useDocuments(params: ListDocumentsParams = {}) {
     return useQuery({
         queryKey: documentKeys.list(params),
         queryFn: () => listDocuments(params),
+        staleTime: 0,
+        gcTime: 0,
+    });
+}
+
+/**
+ * Hook to list documents with infinite scroll pagination
+ */
+export function useInfiniteDocuments(params: Omit<ListDocumentsParams, 'page'> = {}) {
+    return useInfiniteQuery({
+        queryKey: [...documentKeys.lists(), 'infinite', params] as const,
+        queryFn: ({ pageParam = 1 }) => listDocuments({ ...params, page: pageParam, limit: params.limit || 20 }),
+        getNextPageParam: (lastPage) => {
+            const { pagination } = lastPage;
+            if (pagination.page < pagination.totalPages) {
+                return pagination.page + 1;
+            }
+            return undefined;
+        },
+        initialPageParam: 1,
         staleTime: 0,
         gcTime: 0,
     });
