@@ -1,7 +1,10 @@
 "use client";
 
-import { X, Folder, File, Calendar, HardDrive, User, Tag } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { X, Folder, File, Calendar, HardDrive, User, Tag, Download, Pencil, Trash2, Loader2 } from "lucide-react";
+import { motion } from "framer-motion";
+import { useState } from "react";
+import { downloadSingleFile } from "@/lib/download";
+import toast from "react-hot-toast";
 
 interface FileItem {
     id: string;
@@ -15,6 +18,8 @@ interface FileItem {
 interface FileDetailsPanelProps {
     item: FileItem | null;
     onClose: () => void;
+    onRename?: (item: FileItem) => void;
+    onDelete?: (item: FileItem) => void;
 }
 
 function formatFileSize(bytes: number): string {
@@ -55,7 +60,9 @@ function getFileIcon(extension?: string) {
     return <File className={iconClass} />;
 }
 
-export default function FileDetailsPanel({ item, onClose }: FileDetailsPanelProps) {
+export default function FileDetailsPanel({ item, onClose, onRename, onDelete }: FileDetailsPanelProps) {
+    const [isDownloading, setIsDownloading] = useState(false);
+
     if (!item) return null;
 
     const isFolder = item.type === "folder";
@@ -66,6 +73,26 @@ export default function FileDetailsPanel({ item, onClose }: FileDetailsPanelProp
         { icon: Calendar, label: "Modified", value: item.modified },
         { icon: User, label: "Owner", value: "You" },
     ];
+
+    const handleDownload = async () => {
+        if (isFolder) return;
+        setIsDownloading(true);
+        try {
+            await downloadSingleFile(item.id);
+        } catch (err) {
+            toast.error('Failed to download file');
+        } finally {
+            setIsDownloading(false);
+        }
+    };
+
+    const handleRename = () => {
+        onRename?.(item);
+    };
+
+    const handleDelete = () => {
+        onDelete?.(item);
+    };
 
     return (
         <>
@@ -125,16 +152,32 @@ export default function FileDetailsPanel({ item, onClose }: FileDetailsPanelProp
 
                     {/* Action Buttons */}
                     <div className="mt-6 pt-6 border-t border-base-300 space-y-2">
-                        <button className="btn btn-primary btn-block btn-sm">
-                            Download
-                        </button>
-                        <button className="btn btn-ghost btn-block btn-sm">
-                            Share
-                        </button>
-                        <button className="btn btn-ghost btn-block btn-sm">
+                        {!isFolder && (
+                            <button 
+                                className="btn btn-primary btn-block btn-sm"
+                                onClick={handleDownload}
+                                disabled={isDownloading}
+                            >
+                                {isDownloading ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                    <Download className="h-4 w-4" />
+                                )}
+                                {isDownloading ? 'Downloading...' : 'Download'}
+                            </button>
+                        )}
+                        <button 
+                            className="btn btn-ghost btn-block btn-sm"
+                            onClick={handleRename}
+                        >
+                            <Pencil className="h-4 w-4" />
                             Rename
                         </button>
-                        <button className="btn btn-ghost btn-block btn-sm text-error">
+                        <button 
+                            className="btn btn-ghost btn-block btn-sm text-error"
+                            onClick={handleDelete}
+                        >
+                            <Trash2 className="h-4 w-4" />
                             Delete
                         </button>
                     </div>
