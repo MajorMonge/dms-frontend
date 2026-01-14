@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../api-client';
+import { userKeys } from './user';
 import type {
     Folder,
     FolderWithCounts,
@@ -299,6 +300,8 @@ export function useDeleteFolder(options?: {
             queryClient.invalidateQueries({ queryKey: folderKeys.all });
             // Also invalidate documents since they may have been soft-deleted
             queryClient.invalidateQueries({ queryKey: ['documents'] });
+            // Update storage info since folder deletion affects storage
+            queryClient.invalidateQueries({ queryKey: userKeys.storage() });
             options?.onSuccess?.(result);
         },
         onError: options?.onError,
