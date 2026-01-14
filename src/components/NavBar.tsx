@@ -8,12 +8,14 @@ import { useLogout } from "@/lib/api/auth";
 import { useRouter } from "next/navigation";
 import { ROUTES } from "@/lib/routes";
 import toast from "react-hot-toast";
+import SearchModal from "./SearchModal";
 
 export default function NavBarComponent() {
     const preferences = useStore(appPreferencesStore);
     const auth = useStore(authStore);
     const theme = preferences.theme;
     const [mounted, setMounted] = useState(false);
+    const [isSearchOpen, setIsSearchOpen] = useState(false);
     const router = useRouter();
 
     const user = auth.user;
@@ -39,6 +41,18 @@ export default function NavBarComponent() {
         document.documentElement.setAttribute('data-theme', theme);
     }, [theme]);
 
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+                e.preventDefault();
+                setIsSearchOpen(true);
+            }
+        };
+
+        document.addEventListener('keydown', handleKeyDown);
+        return () => document.removeEventListener('keydown', handleKeyDown);
+    }, []);
+
     const changeTheme = () => {
         const newTheme = theme === "dim" ? "light" : "dim";
         appPreferencesStore.set({ ...preferences, theme: newTheme });
@@ -51,7 +65,10 @@ export default function NavBarComponent() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
                 </svg>
             </button>
-            <label className="input shadow-sm rounded-box outline-none">
+            <button 
+                onClick={() => setIsSearchOpen(true)}
+                className="input shadow-sm rounded-box outline-none cursor-pointer hover:bg-base-200 transition-colors flex items-center gap-2"
+            >
                 <svg className="h-[1em] opacity-50" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
                     <g
                         strokeLinejoin="round"
@@ -64,8 +81,9 @@ export default function NavBarComponent() {
                         <path d="m21 21-4.3-4.3"></path>
                     </g>
                 </svg>
-                <input type="search" required placeholder="Search" className="rounded-box" />
-            </label>
+                <span className="text-base-content/50">Search...</span>
+                <kbd className="kbd kbd-sm ml-auto hidden sm:inline-flex">Ctrl+K</kbd>
+            </button>
         </div>
         <div className="navbar-end gap-4">
             <div className="dropdown dropdown-end flex flex-row gap-4 items-center z-99">
@@ -117,5 +135,10 @@ export default function NavBarComponent() {
                 )}
             </div>
         </div>
+
+        <SearchModal 
+            isOpen={isSearchOpen} 
+            onClose={() => setIsSearchOpen(false)} 
+        />
     </div>);
 }
