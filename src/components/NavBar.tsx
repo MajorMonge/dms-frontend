@@ -1,13 +1,33 @@
 'use client';
 import { useStore } from "@nanostores/react";
 import { appPreferencesStore } from "@/store/app";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { toggleMobileDrawer } from "./MobileDrawer";
+import { useLogout } from "@/lib/api/auth";
+import { useRouter } from "next/navigation";
+import { ROUTES } from "@/lib/routes";
+import toast from "react-hot-toast";
 
 export default function NavBarComponent() {
     const preferences = useStore(appPreferencesStore);
     const theme = preferences.theme;
     const [mounted, setMounted] = useState(false);
+    const router = useRouter();
+
+    const logoutMutation = useLogout({
+        onSuccess: () => {
+            toast.success('Logged out successfully');
+            router.push(ROUTES.LOGIN.path);
+        },
+        onError: (error) => {
+            toast.error(error.message || 'Logout failed');
+            router.push(ROUTES.LOGIN.path);
+        },
+    });
+
+    const handleLogout = useCallback(() => {
+        logoutMutation.mutate();
+    }, [logoutMutation]);
 
     useEffect(() => {
         setMounted(true);
@@ -61,7 +81,22 @@ export default function NavBarComponent() {
                                     Profile
                                 </a>
                             </li>
-                            <li><a>Logout</a></li>
+                            <li>
+                                <button 
+                                    onClick={handleLogout}
+                                    disabled={logoutMutation.isPending}
+                                    className="justify-between"
+                                >
+                                    {logoutMutation.isPending ? (
+                                        <>
+                                            <span className="loading loading-spinner loading-xs" />
+                                            Logging out...
+                                        </>
+                                    ) : (
+                                        'Logout'
+                                    )}
+                                </button>
+                            </li>
                             <hr className="border-base-300" />
                             <li >
                                 <label className="label cursor-pointer text-base-content active:text-base-100" htmlFor="theme-toggle">
