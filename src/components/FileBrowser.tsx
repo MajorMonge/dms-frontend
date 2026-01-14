@@ -7,7 +7,7 @@ import { Folder as FolderIcon, File, MoreVertical, Upload, FolderPlus, Grid, Lis
 import { motion, AnimatePresence } from "framer-motion";
 import { appPreferencesStore } from "@/store/app";
 import FileDetailsPanel from "./FileDetailsPanel";
-import { useDocuments, useDeleteDocument } from "@/lib/api/documents";
+import { useDocuments } from "@/lib/api/documents";
 import { downloadSingleFile, downloadFilesWithTracking } from "@/lib/download";
 import { useFolders, useRootFolders, useFolderBreadcrumbs } from "@/lib/api/folders";
 import type { Document, Folder, Breadcrumb } from "@/types/api";
@@ -15,6 +15,8 @@ import toast from "react-hot-toast";
 import CreateFolderModal from "./CreateFolderModal";
 import RenameFolderModal from "./RenameFolderModal";
 import DeleteFolderModal from "./DeleteFolderModal";
+import RenameDocumentModal from "./RenameDocumentModal";
+import DeleteDocumentModal from "./DeleteDocumentModal";
 import UploadModal from "./UploadModal";
 
 interface FileItem {
@@ -195,6 +197,8 @@ export default function FileBrowser() {
     const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
     const [renameFolderItem, setRenameFolderItem] = useState<FileItem | null>(null);
     const [deleteFolderItem, setDeleteFolderItem] = useState<FileItem | null>(null);
+    const [renameDocumentItem, setRenameDocumentItem] = useState<FileItem | null>(null);
+    const [deleteDocumentItem, setDeleteDocumentItem] = useState<FileItem | null>(null);
 
     // Get folder ID from URL search params
     const currentFolderId = searchParams.get("folder") || undefined;
@@ -242,17 +246,6 @@ export default function FileBrowser() {
 
     // Fetch breadcrumbs for current folder
     const { data: breadcrumbsData } = useFolderBreadcrumbs(currentFolderId);
-
-    // Mutations
-    const deleteDocumentMutation = useDeleteDocument({
-        onSuccess: () => {
-            toast.success('Item moved to trash');
-            refetchDocuments();
-        },
-        onError: (error) => {
-            toast.error(error.message || 'Failed to delete');
-        },
-    });
 
     // Transform API data to FileItem format
     const folders: FileItem[] = useMemo(() => 
@@ -347,15 +340,14 @@ export default function FileBrowser() {
                 if (item.type === "folder") {
                     setRenameFolderItem(item);
                 } else {
-                    // TODO: Implement document rename
-                    toast.error('Document rename not implemented yet');
+                    setRenameDocumentItem(item);
                 }
                 break;
             case "delete":
                 if (item.type === "folder") {
                     setDeleteFolderItem(item);
                 } else {
-                    deleteDocumentMutation.mutate({ id: item.id });
+                    setDeleteDocumentItem(item);
                 }
                 break;
             case "download":
@@ -371,7 +363,7 @@ export default function FileBrowser() {
             default:
                 toast.error(`Action "${action}" not implemented yet`);
         }
-    }, [deleteDocumentMutation]);
+    }, []);
 
     // Download selected files (only files, not folders)
     const handleDownloadSelected = useCallback(async () => {
@@ -645,6 +637,24 @@ export default function FileBrowser() {
                 folderId={deleteFolderItem?.id || ''}
                 folderName={deleteFolderItem?.name || ''}
                 onSuccess={() => refetchFolders()}
+            />
+
+            {/* Rename Document Modal */}
+            <RenameDocumentModal
+                isOpen={!!renameDocumentItem}
+                onClose={() => setRenameDocumentItem(null)}
+                documentId={renameDocumentItem?.id || ''}
+                currentName={renameDocumentItem?.name || ''}
+                onSuccess={() => refetchDocuments()}
+            />
+
+            {/* Delete Document Modal */}
+            <DeleteDocumentModal
+                isOpen={!!deleteDocumentItem}
+                onClose={() => setDeleteDocumentItem(null)}
+                documentId={deleteDocumentItem?.id || ''}
+                documentName={deleteDocumentItem?.name || ''}
+                onSuccess={() => refetchDocuments()}
             />
         </div>
     );
