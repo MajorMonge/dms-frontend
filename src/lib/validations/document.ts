@@ -3,7 +3,78 @@ import { z } from 'zod';
 // ============= Constants =============
 
 const OBJECT_ID_REGEX = /^[0-9a-fA-F]{24}$/;
-const MAX_FILE_SIZE_MB = 100; // Should match backend config
+export const MAX_FILE_SIZE_MB = Number(process.env.NEXT_PUBLIC_MAX_FILE_SIZE_MB) || 25;
+export const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
+
+// Default allowed file extensions (without dots)
+const DEFAULT_ALLOWED_EXTENSIONS = [
+    // Documents
+    'pdf', 'doc', 'docx', 'txt', 'rtf', 'odt', 'md',
+    // Spreadsheets
+    'xls', 'xlsx', 'csv', 'ods',
+    // Presentations
+    'ppt', 'pptx', 'odp',
+    // Data/Config
+    'json', 'xml', 'yaml', 'yml',
+    // Images
+    'jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp',
+    // Web
+    'html', 'htm',
+];
+
+// Parse allowed extensions from env var (comma-separated) or use defaults
+// Example: NEXT_PUBLIC_ALLOWED_FILE_TYPES=pdf,doc,docx,xlsx,jpg,png
+const parseAllowedExtensions = (): string[] => {
+    const envValue = process.env.NEXT_PUBLIC_ALLOWED_FILE_TYPES;
+    if (!envValue) return DEFAULT_ALLOWED_EXTENSIONS;
+    
+    return envValue
+        .split(',')
+        .map(ext => ext.trim().toLowerCase().replace(/^\./, '')) // Remove leading dots, trim, lowercase
+        .filter(ext => ext.length > 0);
+};
+
+export const ALLOWED_FILE_EXTENSIONS = parseAllowedExtensions();
+
+// MIME type mapping for the accept attribute
+export const ALLOWED_MIME_TYPES: Record<string, string> = {
+    // Documents
+    pdf: 'application/pdf',
+    doc: 'application/msword',
+    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    txt: 'text/plain',
+    rtf: 'application/rtf',
+    odt: 'application/vnd.oasis.opendocument.text',
+    md: 'text/markdown',
+    // Spreadsheets
+    xls: 'application/vnd.ms-excel',
+    xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    csv: 'text/csv',
+    ods: 'application/vnd.oasis.opendocument.spreadsheet',
+    // Presentations
+    ppt: 'application/vnd.ms-powerpoint',
+    pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    odp: 'application/vnd.oasis.opendocument.presentation',
+    // Data/Config
+    json: 'application/json',
+    xml: 'application/xml',
+    yaml: 'application/x-yaml',
+    yml: 'application/x-yaml',
+    // Images
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    png: 'image/png',
+    gif: 'image/gif',
+    webp: 'image/webp',
+    svg: 'image/svg+xml',
+    bmp: 'image/bmp',
+    // Web
+    html: 'text/html',
+    htm: 'text/html',
+};
+
+// Generate accept string for file input (e.g., ".pdf,.doc,.docx,...")
+export const FILE_INPUT_ACCEPT = ALLOWED_FILE_EXTENSIONS.map(ext => `.${ext}`).join(',');
 
 // ============= Base Schemas =============
 
@@ -34,7 +105,7 @@ export const deleteDocumentQuerySchema = z.object({
 });
 
 export const listDocumentsQuerySchema = z.object({
-    folderId: z.string().regex(OBJECT_ID_REGEX, 'Invalid folder ID').optional(),
+    folderId: z.string().regex(OBJECT_ID_REGEX, 'Invalid folder ID').nullable().optional(),
     tags: z.union([z.string(), z.array(z.string())]).optional().transform(val =>
         val ? (Array.isArray(val) ? val : val.split(',')) : undefined
     ),
@@ -82,7 +153,7 @@ export const searchDocumentsQuerySchema = z.object({
     maxSize: z.string().optional().transform(val => val ? parseInt(val, 10) : undefined),
     dateFrom: z.string().datetime().optional(),
     dateTo: z.string().datetime().optional(),
-    folderId: z.string().regex(OBJECT_ID_REGEX, 'Invalid folder ID').optional(),
+    folderId: z.string().regex(OBJECT_ID_REGEX, 'Invalid folder ID').nullable().optional(),
     page: z.string().optional().transform(val => val ? parseInt(val, 10) : 1),
     limit: z.string().optional().transform(val => val ? Math.min(parseInt(val, 10), 100) : 20),
     sortBy: z.enum(['name', 'createdAt', 'updatedAt', 'size', 'relevance']).optional().default('createdAt'),
