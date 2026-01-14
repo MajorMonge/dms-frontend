@@ -9,3 +9,6 @@ export * from './document';
 
 // Folder schemas
 export * from './folder';
+
+// PDF schemas
+export * from './pdf';
