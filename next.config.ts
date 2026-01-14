@@ -1,8 +1,12 @@
 import type { NextConfig } from "next";
 import withPWA from "next-pwa";
+import { generateRedirects } from "./src/lib/routes";
 
 const nextConfig: NextConfig = {
   turbopack: {},
+  async redirects() {
+    return generateRedirects();
+  },
 };
 
 const pwaConfig = withPWA({
