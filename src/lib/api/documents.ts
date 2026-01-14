@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../api-client';
 import { getAccessToken } from '@/store/auth';
 import { folderKeys } from './folders';
+import { userKeys } from './user';
 import type {
     Document,
     DocumentListResponse,
@@ -475,6 +476,7 @@ export function useDeleteDocument(options?: { onSuccess?: () => void; onError?: 
             await Promise.all([
                 queryClient.invalidateQueries({ queryKey: documentKeys.all }),
                 queryClient.invalidateQueries({ queryKey: folderKeys.all }),
+                queryClient.invalidateQueries({ queryKey: userKeys.storage() }),
             ]);
             options?.onSuccess?.();
         },
@@ -484,6 +486,7 @@ export function useDeleteDocument(options?: { onSuccess?: () => void; onError?: 
             // Fire and forget - don't await
             queryClient.invalidateQueries({ queryKey: documentKeys.all });
             queryClient.invalidateQueries({ queryKey: folderKeys.all });
+            queryClient.invalidateQueries({ queryKey: userKeys.storage() });
             options?.onError?.(error);
         },
     });
@@ -558,6 +561,7 @@ export function useRestoreDocument(options?: { onSuccess?: (doc: Document) => vo
             await Promise.all([
                 queryClient.invalidateQueries({ queryKey: documentKeys.all }),
                 queryClient.invalidateQueries({ queryKey: folderKeys.all }),
+                queryClient.invalidateQueries({ queryKey: userKeys.storage() }),
             ]);
             options?.onSuccess?.(doc);
         },
@@ -566,6 +570,7 @@ export function useRestoreDocument(options?: { onSuccess?: (doc: Document) => vo
             await Promise.all([
                 queryClient.invalidateQueries({ queryKey: documentKeys.all }),
                 queryClient.invalidateQueries({ queryKey: folderKeys.all }),
+                queryClient.invalidateQueries({ queryKey: userKeys.storage() }),
             ]);
             options?.onError?.(error);
         },
@@ -613,6 +618,7 @@ export function useEmptyTrash(options?: { onSuccess?: (result: { deletedCount: n
         onSuccess: (result) => {
             queryClient.invalidateQueries({ queryKey: documentKeys.trash() });
             queryClient.invalidateQueries({ queryKey: documentKeys.lists() });
+            queryClient.invalidateQueries({ queryKey: userKeys.storage() });
             options?.onSuccess?.(result);
         },
         onError: options?.onError,
