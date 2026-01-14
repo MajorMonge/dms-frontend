@@ -25,8 +25,5 @@ jobs:
             NODE_ENV="production" \
             --app dms-frontendapp-prod
       - name: Deploy to Fly
-        run:  flyctl deploy --remote-only --app dms-frontendapp-prod \
-            --build-arg NEXT_PUBLIC_API_URL="${{ env.NEXT_PUBLIC_API_URL }}" \
-            --build-arg NEXT_PUBLIC_MAX_FILE_SIZE_MB="${{ env.NEXT_PUBLIC_MAX_FILE_SIZE_MB }}" \
-            --build-arg NEXT_PUBLIC_ALLOWED_FILE_TYPES="${{ env.NEXT_PUBLIC_ALLOWED_FILE_TYPES }}"
+        run:  flyctl deploy --remote-only --app dms-frontendapp-prod
 
