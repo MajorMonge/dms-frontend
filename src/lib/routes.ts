@@ -56,20 +56,6 @@ export const ROUTES = {
         title: 'Home',
         icon: 'Home',
     },
-    RECENT: {
-        path: '/recent',
-        aliases: ['/recents'],
-        protected: true,
-        title: 'Recent',
-        icon: 'Clock',
-    },
-    STARRED: {
-        path: '/starred',
-        aliases: ['/favorites', '/favourites'],
-        protected: true,
-        title: 'Starred',
-        icon: 'Star',
-    },
     TRASH: {
         path: '/trash',
         aliases: ['/bin', '/deleted'],
@@ -181,8 +167,6 @@ export function navigateTo(alias: keyof typeof ROUTES, params?: Record<string, s
  */
 export const MAIN_NAVIGATION = [
     ROUTES.HOME,
-    ROUTES.RECENT,
-    ROUTES.STARRED,
     ROUTES.TRASH,
 ] as const;
 
