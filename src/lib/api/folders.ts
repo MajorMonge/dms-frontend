@@ -228,6 +228,8 @@ export function useFolders(params: ListFoldersParams = {}) {
     return useQuery({
         queryKey: folderKeys.list(params),
         queryFn: () => listFolders(params),
+        staleTime: 0,
+        gcTime: 0,
     });
 }
 
@@ -260,6 +262,8 @@ export function useRootFolders() {
     return useQuery({
         queryKey: [...folderKeys.all, 'root'] as const,
         queryFn: getRootFolders,
+        staleTime: 0,
+        gcTime: 0,
     });
 }
 
