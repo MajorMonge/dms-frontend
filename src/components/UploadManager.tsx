@@ -19,6 +19,7 @@ import {
     documentKeys,
 } from "@/lib/api/documents";
 import { folderKeys } from "@/lib/api/folders";
+import { userKeys } from "@/lib/api/user";
 
 // Maximum concurrent uploads
 const MAX_CONCURRENT_UPLOADS = 3;
@@ -97,6 +98,10 @@ export default function UploadManager() {
             await queryClient.invalidateQueries({ 
                 queryKey: folderKeys.all,
             });
+            // Invalidate storage info to update sidebar
+            await queryClient.invalidateQueries({
+                queryKey: userKeys.storage(),
+            });
             console.log('[Upload] Cache invalidated');
         } catch (error) {
             console.error('[Upload] Presigned upload failed:', error);
@@ -128,6 +133,10 @@ export default function UploadManager() {
             // Also invalidate folder counts
             await queryClient.invalidateQueries({ 
                 queryKey: folderKeys.all,
+            });
+            // Invalidate storage info to update sidebar
+            await queryClient.invalidateQueries({
+                queryKey: userKeys.storage(),
             });
             console.log('[Upload] Cache invalidated');
         } catch (error) {
