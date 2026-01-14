@@ -28,6 +28,7 @@ export default function BulkDeleteModal({
 }: BulkDeleteModalProps) {
     const [isDeleting, setIsDeleting] = useState(false);
     const [progress, setProgress] = useState(0);
+    const [isPermanent, setIsPermanent] = useState(false);
 
     const deleteDocument = useDeleteDocument();
     const deleteFolder = useDeleteFolder();
@@ -47,7 +48,7 @@ export default function BulkDeleteModal({
                 if (item.type === "folder") {
                     await deleteFolder.mutateAsync(item.id);
                 } else {
-                    await deleteDocument.mutateAsync({ id: item.id });
+                    await deleteDocument.mutateAsync({ id: item.id, permanent: isPermanent });
                 }
                 successCount++;
             } catch (err) {
@@ -59,12 +60,13 @@ export default function BulkDeleteModal({
         
         setIsDeleting(false);
         
+        const action = isPermanent ? 'Permanently deleted' : 'Deleted';
         if (errorCount === 0) {
-            toast.success(`Deleted ${successCount} item${successCount !== 1 ? 's' : ''}`);
+            toast.success(`${action} ${successCount} item${successCount !== 1 ? 's' : ''}`);
         } else if (successCount === 0) {
             toast.error(`Failed to delete all items`);
         } else {
-            toast.success(`Deleted ${successCount} item${successCount !== 1 ? 's' : ''}, ${errorCount} failed`);
+            toast.success(`${action} ${successCount} item${successCount !== 1 ? 's' : ''}, ${errorCount} failed`);
         }
         
         onClose();
@@ -131,8 +133,34 @@ export default function BulkDeleteModal({
                                         <span>{fileCount} file{fileCount !== 1 ? 's' : ''}</span>
                                     )}
                                 </div>
+
+                                <div className="mt-4 form-control">
+                                    <label className="label cursor-pointer justify-start gap-3">
+                                        <input 
+                                            type="checkbox" 
+                                            className="checkbox checkbox-error" 
+                                            checked={isPermanent}
+                                            onChange={(e) => setIsPermanent(e.target.checked)}
+                                            disabled={isDeleting}
+                                        />
+                                        <div className="flex flex-col">
+                                            <span className="label-text font-medium">Delete permanently</span>
+                                            <span className="label-text-alt text-base-content/60">
+                                                Skip trash and delete files immediately
+                                            </span>
+                                        </div>
+                                    </label>
+                                </div>
                                 
-                                {folderCount > 0 && (
+                                {folderCount > 0 && isPermanent && (
+                                    <div className="mt-4 p-3 bg-error/10 border border-error/20 rounded-lg">
+                                        <p className="text-sm text-error-content">
+                                            <strong>Warning:</strong> All selected items will be permanently deleted and cannot be recovered.
+                                        </p>
+                                    </div>
+                                )}
+                                
+                                {folderCount > 0 && !isPermanent && (
                                     <div className="mt-4 p-3 bg-warning/10 border border-warning/20 rounded-lg">
                                         <p className="text-sm text-warning-content">
                                             <strong>Warning:</strong> Folders will be permanently deleted. Documents inside will be moved to trash.
@@ -140,7 +168,15 @@ export default function BulkDeleteModal({
                                     </div>
                                 )}
                                 
-                                {folderCount === 0 && (
+                                {folderCount === 0 && isPermanent && (
+                                    <div className="mt-4 p-3 bg-error/10 border border-error/20 rounded-lg">
+                                        <p className="text-sm text-error-content">
+                                            <strong>Warning:</strong> Files will be permanently deleted and cannot be recovered.
+                                        </p>
+                                    </div>
+                                )}
+                                
+                                {folderCount === 0 && !isPermanent && (
                                     <div className="mt-4 p-3 bg-info/10 border border-info/20 rounded-lg">
                                         <p className="text-sm text-info-content">
                                             <strong>Note:</strong> Files will be moved to trash. You can restore them within 30 days.
