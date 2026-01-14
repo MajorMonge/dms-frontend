@@ -7,9 +7,10 @@ import { motion, AnimatePresence } from "framer-motion";
 import { appPreferencesStore } from "@/store/app";
 import FileDetailsPanel from "./FileDetailsPanel";
 import { useDocuments, useDeleteDocument, getDownloadUrl } from "@/lib/api/documents";
-import { useFolders, useFolderBreadcrumbs, useCreateFolder, useDeleteFolder } from "@/lib/api/folders";
+import { useFolders, useRootFolders, useFolderBreadcrumbs, useDeleteFolder } from "@/lib/api/folders";
 import type { Document, Folder, Breadcrumb } from "@/types/api";
 import toast from "react-hot-toast";
+import CreateFolderModal from "./CreateFolderModal";
 
 interface FileItem {
     id: string;
@@ -182,16 +183,30 @@ export default function FileBrowser() {
     const [currentFolderId, setCurrentFolderId] = useState<string | undefined>(undefined);
     const [detailsItem, setDetailsItem] = useState<FileItem | null>(null);
     const [clickTimeout, setClickTimeout] = useState<NodeJS.Timeout | null>(null);
-    const [isCreatingFolder, setIsCreatingFolder] = useState(false);
-    const [newFolderName, setNewFolderName] = useState("");
+    const [isCreateFolderModalOpen, setIsCreateFolderModalOpen] = useState(false);
 
-    // Fetch folders and documents for current location
+    const isAtRoot = !currentFolderId;
+
     const { 
-        data: foldersData, 
-        isLoading: foldersLoading, 
-        error: foldersError,
-        refetch: refetchFolders 
+        data: rootFoldersData, 
+        isLoading: rootFoldersLoading, 
+        error: rootFoldersError,
+        refetch: refetchRootFolders 
+    } = useRootFolders();
+
+    const { 
+        data: subFoldersData, 
+        isLoading: subFoldersLoading, 
+        error: subFoldersError,
+        refetch: refetchSubFolders 
     } = useFolders({ parentId: currentFolderId });
+
+    const foldersData = isAtRoot 
+        ? { folders: rootFoldersData || [] } 
+        : subFoldersData;
+    const foldersLoading = isAtRoot ? rootFoldersLoading : subFoldersLoading;
+    const foldersError = isAtRoot ? rootFoldersError : subFoldersError;
+    const refetchFolders = isAtRoot ? refetchRootFolders : refetchSubFolders;
     
     const { 
         data: documentsData, 
@@ -204,18 +219,6 @@ export default function FileBrowser() {
     const { data: breadcrumbsData } = useFolderBreadcrumbs(currentFolderId);
 
     // Mutations
-    const createFolderMutation = useCreateFolder({
-        onSuccess: () => {
-            toast.success('Folder created');
-            setIsCreatingFolder(false);
-            setNewFolderName("");
-            refetchFolders();
-        },
-        onError: (error) => {
-            toast.error(error.message || 'Failed to create folder');
-        },
-    });
-
     const deleteDocumentMutation = useDeleteDocument({
         onSuccess: () => {
             toast.success('Item moved to trash');
@@ -348,17 +351,6 @@ export default function FileBrowser() {
         }
     }, [deleteDocumentMutation, deleteFolderMutation]);
 
-    const handleCreateFolder = useCallback(() => {
-        if (!newFolderName.trim()) {
-            toast.error('Please enter a folder name');
-            return;
-        }
-        createFolderMutation.mutate({
-            name: newFolderName.trim(),
-            parentId: currentFolderId,
-        });
-    }, [newFolderName, currentFolderId, createFolderMutation]);
-
     const renderItems = (items: FileItem[], gridCols: string) => {
         if (items.length === 0) return null;
 
@@ -411,53 +403,13 @@ export default function FileBrowser() {
                             <Upload className="h-4 w-4" />
                             Upload
                         </button>
-                        {isCreatingFolder ? (
-                            <div className="flex gap-2 items-center">
-                                <input
-                                    type="text"
-                                    className="input input-sm input-bordered w-40"
-                                    placeholder="Folder name"
-                                    value={newFolderName}
-                                    onChange={(e) => setNewFolderName(e.target.value)}
-                                    onKeyDown={(e) => {
-                                        if (e.key === 'Enter') handleCreateFolder();
-                                        if (e.key === 'Escape') {
-                                            setIsCreatingFolder(false);
-                                            setNewFolderName("");
-                                        }
-                                    }}
-                                    autoFocus
-                                />
-                                <button 
-                                    className="btn btn-sm btn-primary"
-                                    onClick={handleCreateFolder}
-                                    disabled={createFolderMutation.isPending}
-                                >
-                                    {createFolderMutation.isPending ? (
-                                        <Loader2 className="h-4 w-4 animate-spin" />
-                                    ) : (
-                                        'Create'
-                                    )}
-                                </button>
-                                <button 
-                                    className="btn btn-sm btn-ghost"
-                                    onClick={() => {
-                                        setIsCreatingFolder(false);
-                                        setNewFolderName("");
-                                    }}
-                                >
-                                    Cancel
-                                </button>
-                            </div>
-                        ) : (
-                            <button 
-                                className="btn btn-ghost btn-sm gap-2"
-                                onClick={() => setIsCreatingFolder(true)}
-                            >
-                                <FolderPlus className="h-4 w-4" />
-                                New Folder
-                            </button>
-                        )}
+                        <button 
+                            className="btn btn-ghost btn-sm gap-2"
+                            onClick={() => setIsCreateFolderModalOpen(true)}
+                        >
+                            <FolderPlus className="h-4 w-4" />
+                            New Folder
+                        </button>
                     </div>
                     <div className="flex gap-1">
                         <button
@@ -488,6 +440,13 @@ export default function FileBrowser() {
                                     Home
                                 </a>
                             </li>
+                            {currentFolderId && !breadcrumbsData && (
+                                <li>
+                                    <span className="flex items-center gap-1 text-base-content/50">
+                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                    </span>
+                                </li>
+                            )}
                             {breadcrumbsData?.map((breadcrumb) => (
                                 <li key={breadcrumb.id}>
                                     <a
@@ -598,6 +557,14 @@ export default function FileBrowser() {
                     onClose={() => setDetailsItem(null)}
                 />
             )}
+
+            {/* Create Folder Modal */}
+            <CreateFolderModal
+                isOpen={isCreateFolderModalOpen}
+                onClose={() => setIsCreateFolderModalOpen(false)}
+                parentId={currentFolderId}
+                onSuccess={() => refetchFolders()}
+            />
         </div>
     );
 }
