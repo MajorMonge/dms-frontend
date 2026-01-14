@@ -18,6 +18,26 @@ export function useAuthSync() {
   const auth = useStore(authStore);
   const isRefreshing = useRef(false);
   const lastRefreshAttempt = useRef(0);
+  const tokenExpiresAt = useRef<number | null>(null);
+
+  // Calculate and track absolute token expiration time
+  useEffect(() => {
+    if (auth.tokens?.expiresIn) {
+      // Only update if we don't have one or tokens changed
+      if (!tokenExpiresAt.current) {
+        tokenExpiresAt.current = Date.now() + (auth.tokens.expiresIn * 1000);
+      }
+    } else {
+      tokenExpiresAt.current = null;
+    }
+  }, [auth.tokens?.accessToken, auth.tokens?.expiresIn]);
+
+  // Reset expiration tracking when tokens are updated
+  useEffect(() => {
+    if (auth.tokens?.expiresIn) {
+      tokenExpiresAt.current = Date.now() + (auth.tokens.expiresIn * 1000);
+    }
+  }, [auth.tokens?.accessToken]);
 
   // Token refresh function
   const performTokenRefresh = useCallback(async () => {
@@ -38,6 +58,8 @@ export function useAuthSync() {
       
       if (response.success && response.data?.tokens) {
         updateTokens(response.data.tokens);
+        // Update the expiration time after successful refresh
+        tokenExpiresAt.current = Date.now() + (response.data.tokens.expiresIn * 1000);
         // Clear the refresh needed flag
         document.cookie = 'tokenNeedsRefresh=; path=/; max-age=0';
         return true;
@@ -45,6 +67,7 @@ export function useAuthSync() {
         // Refresh failed, clear auth
         console.error('Token refresh failed:', response.error?.message);
         clearAuth();
+        tokenExpiresAt.current = null;
         return false;
       }
     } catch (error) {
@@ -62,7 +85,7 @@ export function useAuthSync() {
 
     if (auth.tokens?.accessToken) {
       const expiresIn = auth.tokens.expiresIn || 3600;
-      const expiresAt = Date.now() + (expiresIn * 1000);
+      const expiresAt = tokenExpiresAt.current || (Date.now() + (expiresIn * 1000));
       
       // Store access token
       document.cookie = `accessToken=${auth.tokens.accessToken}; path=/; max-age=${expiresIn}; SameSite=Lax`;
@@ -86,6 +109,7 @@ export function useAuthSync() {
       document.cookie = 'tokenExpiresAt=; path=/; max-age=0';
       document.cookie = 'auth=; path=/; max-age=0';
       document.cookie = 'tokenNeedsRefresh=; path=/; max-age=0';
+      tokenExpiresAt.current = null;
     }
   }, [auth]);
 
@@ -114,10 +138,9 @@ export function useAuthSync() {
   // Proactive token refresh before expiration
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    if (!auth.tokens?.accessToken || !auth.tokens?.expiresIn) return;
+    if (!auth.tokens?.accessToken || !tokenExpiresAt.current) return;
 
-    const expiresAt = Date.now() + (auth.tokens.expiresIn * 1000);
-    const timeUntilRefresh = expiresAt - Date.now() - TOKEN_REFRESH_THRESHOLD_MS;
+    const timeUntilRefresh = tokenExpiresAt.current - Date.now() - TOKEN_REFRESH_THRESHOLD_MS;
     
     if (timeUntilRefresh <= 0) {
       // Token already needs refresh
@@ -131,7 +154,7 @@ export function useAuthSync() {
     }, timeUntilRefresh);
 
     return () => clearTimeout(timeoutId);
-  }, [auth.tokens?.accessToken, auth.tokens?.expiresIn, performTokenRefresh]);
+  }, [auth.tokens?.accessToken, performTokenRefresh]);
 }
 
 /**
@@ -145,5 +168,20 @@ export function useAuth() {
     tokens: auth.tokens,
     isAuthenticated: auth.isAuthenticated,
     isLoading: false, // Can be enhanced with loading state
+  };
+}
+
+/**
+ * Hook to check if queries should be enabled based on auth state
+ * Use this in combination with React Query's enabled option
+ */
+export function useAuthReady() {
+  const auth = useStore(authStore);
+  
+  // Check if we have valid auth state
+  // This helps prevent queries from firing before auth is ready
+  return {
+    isReady: auth.isAuthenticated && !!auth.tokens?.accessToken,
+    isAuthenticated: auth.isAuthenticated,
   };
 }
