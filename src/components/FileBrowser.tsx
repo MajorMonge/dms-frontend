@@ -8,11 +8,12 @@ import { motion, AnimatePresence } from "framer-motion";
 import { appPreferencesStore } from "@/store/app";
 import FileDetailsPanel from "./FileDetailsPanel";
 import { useDocuments, useDeleteDocument, getDownloadUrl } from "@/lib/api/documents";
-import { useFolders, useRootFolders, useFolderBreadcrumbs, useDeleteFolder } from "@/lib/api/folders";
+import { useFolders, useRootFolders, useFolderBreadcrumbs } from "@/lib/api/folders";
 import type { Document, Folder, Breadcrumb } from "@/types/api";
 import toast from "react-hot-toast";
 import CreateFolderModal from "./CreateFolderModal";
 import RenameFolderModal from "./RenameFolderModal";
+import DeleteFolderModal from "./DeleteFolderModal";
 
 interface FileItem {
     id: string;
@@ -190,6 +191,7 @@ export default function FileBrowser() {
     const [clickTimeout, setClickTimeout] = useState<NodeJS.Timeout | null>(null);
     const [isCreateFolderModalOpen, setIsCreateFolderModalOpen] = useState(false);
     const [renameFolderItem, setRenameFolderItem] = useState<FileItem | null>(null);
+    const [deleteFolderItem, setDeleteFolderItem] = useState<FileItem | null>(null);
 
     // Get folder ID from URL search params
     const currentFolderId = searchParams.get("folder") || undefined;
@@ -246,16 +248,6 @@ export default function FileBrowser() {
         },
         onError: (error) => {
             toast.error(error.message || 'Failed to delete');
-        },
-    });
-
-    const deleteFolderMutation = useDeleteFolder({
-        onSuccess: () => {
-            toast.success('Folder moved to trash');
-            refetchFolders();
-        },
-        onError: (error) => {
-            toast.error(error.message || 'Failed to delete folder');
         },
     });
 
@@ -358,7 +350,7 @@ export default function FileBrowser() {
                 break;
             case "delete":
                 if (item.type === "folder") {
-                    deleteFolderMutation.mutate(item.id);
+                    setDeleteFolderItem(item);
                 } else {
                     deleteDocumentMutation.mutate({ id: item.id });
                 }
@@ -377,7 +369,7 @@ export default function FileBrowser() {
             default:
                 toast.error(`Action "${action}" not implemented yet`);
         }
-    }, [deleteDocumentMutation, deleteFolderMutation]);
+    }, [deleteDocumentMutation]);
 
     const renderItems = (items: FileItem[], gridCols: string) => {
         if (items.length === 0) return null;
@@ -600,6 +592,15 @@ export default function FileBrowser() {
                 onClose={() => setRenameFolderItem(null)}
                 folderId={renameFolderItem?.id || ''}
                 currentName={renameFolderItem?.name || ''}
+                onSuccess={() => refetchFolders()}
+            />
+
+            {/* Delete Folder Modal */}
+            <DeleteFolderModal
+                isOpen={!!deleteFolderItem}
+                onClose={() => setDeleteFolderItem(null)}
+                folderId={deleteFolderItem?.id || ''}
+                folderName={deleteFolderItem?.name || ''}
                 onSuccess={() => refetchFolders()}
             />
         </div>
