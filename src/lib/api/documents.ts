@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../api-client';
 import { getAccessToken } from '@/store/auth';
+import { folderKeys } from './folders';
 import type {
     Document,
     DocumentListResponse,
@@ -142,9 +143,18 @@ export async function updateDocument(id: string, data: UpdateDocumentData): Prom
 export async function deleteDocument(id: string, permanent = false): Promise<void> {
     const url = permanent ? `/api/v1/documents/${id}?permanent=true` : `/api/v1/documents/${id}`;
     
-    await apiClient<void>(url, {
+    const response = await apiClient<ApiResponse<void> | undefined>(url, {
         method: 'DELETE',
     });
+    
+    console.log('[deleteDocument] Response:', response);
+    
+    // Check if the response indicates an error (for non-204 responses)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const anyResponse = response as any;
+    if (anyResponse && anyResponse.success === false) {
+        throw new Error(anyResponse.error?.message || 'Failed to delete document');
+    }
 }
 
 /**
@@ -183,9 +193,14 @@ export async function copyDocument(id: string, name?: string, folderId?: string 
  * Restore document from trash
  */
 export async function restoreDocument(id: string): Promise<Document> {
-    const response = await apiClient<ApiResponse<Document>>(`/api/v1/documents/${id}/restore`, {
+    const response = await apiClient<ApiResponse<Document> | undefined>(`/api/v1/documents/${id}/restore`, {
         method: 'POST',
     });
+    
+    // Handle empty response
+    if (!response) {
+        throw new Error('No response from server');
+    }
     
     if (!response.success) {
         throw new Error('error' in response ? response.error.message : 'Failed to restore document');
@@ -430,6 +445,8 @@ export function useDocuments(params: ListDocumentsParams = {}) {
     return useQuery({
         queryKey: documentKeys.list(params),
         queryFn: () => listDocuments(params),
+        staleTime: 0,
+        gcTime: 0,
     });
 }
 
@@ -452,12 +469,23 @@ export function useDeleteDocument(options?: { onSuccess?: () => void; onError?: 
     
     return useMutation({
         mutationFn: ({ id, permanent = false }: { id: string; permanent?: boolean }) => deleteDocument(id, permanent),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: documentKeys.lists() });
-            queryClient.invalidateQueries({ queryKey: documentKeys.trash() });
+        onSuccess: async () => {
+            console.log('[useDeleteDocument] onSuccess - invalidating queries');
+            // Invalidate all document and folder queries to ensure list updates
+            await Promise.all([
+                queryClient.invalidateQueries({ queryKey: documentKeys.all }),
+                queryClient.invalidateQueries({ queryKey: folderKeys.all }),
+            ]);
             options?.onSuccess?.();
         },
-        onError: options?.onError,
+        onError: (error) => {
+            console.log('[useDeleteDocument] onError - invalidating queries', error);
+            // Invalidate cache on error too (e.g., document already deleted)
+            // Fire and forget - don't await
+            queryClient.invalidateQueries({ queryKey: documentKeys.all });
+            queryClient.invalidateQueries({ queryKey: folderKeys.all });
+            options?.onError?.(error);
+        },
     });
 }
 
@@ -501,6 +529,8 @@ export function useTrashDocuments(page = 1, limit = 20) {
     return useQuery({
         queryKey: [...documentKeys.trash(), { page, limit }] as const,
         queryFn: () => getTrashDocuments(page, limit),
+        staleTime: 0,
+        gcTime: 0,
     });
 }
 
@@ -523,13 +553,22 @@ export function useRestoreDocument(options?: { onSuccess?: (doc: Document) => vo
     
     return useMutation({
         mutationFn: restoreDocument,
-        onSuccess: (doc) => {
-            queryClient.invalidateQueries({ queryKey: documentKeys.lists() });
-            queryClient.invalidateQueries({ queryKey: documentKeys.trash() });
-            queryClient.invalidateQueries({ queryKey: documentKeys.detail(doc.id) });
+        onSuccess: async (doc) => {
+            // Invalidate all document and folder queries to ensure lists update
+            await Promise.all([
+                queryClient.invalidateQueries({ queryKey: documentKeys.all }),
+                queryClient.invalidateQueries({ queryKey: folderKeys.all }),
+            ]);
             options?.onSuccess?.(doc);
         },
-        onError: options?.onError,
+        onError: async (error) => {
+            // Invalidate cache on error too
+            await Promise.all([
+                queryClient.invalidateQueries({ queryKey: documentKeys.all }),
+                queryClient.invalidateQueries({ queryKey: folderKeys.all }),
+            ]);
+            options?.onError?.(error);
+        },
     });
 }
 
