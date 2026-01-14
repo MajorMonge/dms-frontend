@@ -1,11 +1,11 @@
 import { atom } from 'nanostores';
 import { persistentAtom } from '@nanostores/persistent';
-import type { User, AuthTokens } from '@/types/api';
+import type { User, UserProfile, AuthTokens } from '@/types/api';
 
 // ============= Types =============
 
 export interface AuthState {
-    user: User | null;
+    user: UserProfile | null;
     tokens: AuthTokens | null;
     isAuthenticated: boolean;
 }
@@ -38,23 +38,41 @@ export const accessTokenStore = atom<string | null>(null);
 
 /**
  * Set user and tokens after successful login
+ * Note: This sets basic user info, call updateUserProfile for full profile
  */
 export function setAuthData(user: User, tokens: AuthTokens): void {
+    const userProfile: UserProfile = {
+        ...user,
+        storageUsed: 0,
+        storageLimit: 5 * 1024 * 1024 * 1024, // 5GB default
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+    };
+
     authStore.set({
-        user,
+        user: userProfile,
         tokens,
         isAuthenticated: true,
     });
 
-    // Update token atom for real-time access
     accessTokenStore.set(tokens.accessToken);
 
-    // Store in localStorage for api-client backward compatibility
     if (typeof window !== 'undefined') {
         localStorage.setItem('accessToken', tokens.accessToken);
         localStorage.setItem('refreshToken', tokens.refreshToken);
         localStorage.setItem('idToken', tokens.idToken);
     }
+}
+
+/**
+ * Update user profile with full data from /users/me endpoint
+ */
+export function updateUserProfile(profile: UserProfile): void {
+    const current = authStore.get();
+    authStore.set({
+        ...current,
+        user: profile,
+    });
 }
 
 /**
@@ -77,9 +95,22 @@ export function updateTokens(tokens: AuthTokens): void {
 }
 
 /**
- * Update user info
+ * Update user storage info (after uploads, etc.)
  */
-export function updateUser(user: Partial<User>): void {
+export function updateUserStorage(storageUsed: number): void {
+    const current = authStore.get();
+    if (current.user) {
+        authStore.set({
+            ...current,
+            user: { ...current.user, storageUsed },
+        });
+    }
+}
+
+/**
+ * Update user info (partial update)
+ */
+export function updateUser(user: Partial<UserProfile>): void {
     const current = authStore.get();
     if (current.user) {
         authStore.set({
@@ -134,6 +165,49 @@ export function isAuthenticated(): boolean {
 /**
  * Get current user
  */
-export function getCurrentUser(): User | null {
+export function getCurrentUser(): UserProfile | null {
     return authStore.get().user;
+}
+
+// ============= Helpers =============
+
+/**
+ * Get user initials from email
+ */
+export function getUserInitials(user: UserProfile | null): string {
+    if (!user?.email) return '?';
+    
+    const email = user.email;
+    
+    const name = email.split('@')[0];
+    
+    const parts = name.split(/[._-]/);
+    if (parts.length > 1) {
+        return (parts[0][0] + parts[1][0]).toUpperCase();
+    }
+    
+    return name.slice(0, 2).toUpperCase();
+}
+
+/**
+ * Format bytes to human readable string
+ */
+export function formatBytes(bytes: number, decimals = 2): string {
+    if (bytes === 0) return '0 Bytes';
+
+    const k = 1024;
+    const dm = decimals < 0 ? 0 : decimals;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+
+    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+}
+
+/**
+ * Get storage percentage used
+ */
+export function getStoragePercentage(user: UserProfile | null): number {
+    if (!user || !user.storageLimit) return 0;
+    return Math.round((user.storageUsed / user.storageLimit) * 100);
 }
