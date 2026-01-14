@@ -3,9 +3,10 @@
 import { useStore } from "@nanostores/react";
 import { AnimatePresence, motion } from "framer-motion";
 import { atom } from "nanostores";
+import { usePathname } from "next/navigation";
+import { useEffect } from "react";
 import SideBarComponent from "./SideBar";
 
-// Store for mobile drawer state
 export const mobileDrawerStore = atom<boolean>(false);
 
 export const openMobileDrawer = () => mobileDrawerStore.set(true);
@@ -14,6 +15,11 @@ export const toggleMobileDrawer = () => mobileDrawerStore.set(!mobileDrawerStore
 
 export default function MobileDrawer() {
     const isOpen = useStore(mobileDrawerStore);
+    const pathname = usePathname();
+
+    useEffect(() => {
+        closeMobileDrawer();
+    }, [pathname]);
 
     return (
         <AnimatePresence>
