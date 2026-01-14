@@ -8,6 +8,7 @@ import { Suspense, useCallback, useId } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useLogin } from '@/lib/api/auth';
+import { fetchAndUpdateUserProfile } from '@/lib/api/user';
 import { ROUTES } from '@/lib/routes';
 import { loginSchema, type LoginFormData } from '@/lib/validations/auth';
 import { getSafeRedirectUrl } from '@/lib/security';
@@ -35,9 +36,18 @@ function LoginForm() {
     });
 
     const loginMutation = useLogin({
-        onSuccess: (data) => {
+        onSuccess: async (data) => {
             if (data.success) {
                 toast.success('Login successful!');
+                
+                // Fetch full user profile after successful login
+                try {
+                    await fetchAndUpdateUserProfile();
+                } catch (error) {
+                    // Non-blocking: profile fetch failure shouldn't prevent login
+                    console.warn('Failed to fetch user profile:', error);
+                }
+                
                 const redirectParam = searchParams.get('redirect');
                 const safeRedirect = getSafeRedirectUrl(redirectParam);
                 router.push(safeRedirect);
