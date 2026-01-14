@@ -47,12 +47,11 @@ RUN npm prune --omit=dev
 # Final stage for app image
 FROM base
 
-# Copy built application
-COPY --from=build /app /app
-
-# Entrypoint sets up the container.
-ENTRYPOINT [ "/app/docker-entrypoint.js" ]
+# Copy standalone build output
+COPY --from=build /app/.next/standalone ./
+COPY --from=build /app/.next/static ./.next/static
+COPY --from=build /app/public ./public
 
 # Start the server by default, this can be overwritten at runtime
 EXPOSE 3000
-CMD [ "npm", "run", "start" ]
+CMD [ "node", "server.js" ]
