@@ -7,6 +7,7 @@ const nextConfig: NextConfig = {
   async redirects() {
     return generateRedirects();
   },
+  output: "standalone"
 };
 
 const pwaConfig = withPWA({
