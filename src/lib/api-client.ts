@@ -1,4 +1,4 @@
-import { getAccessToken } from '@/store/auth';
+import { getAccessToken, getRefreshToken, updateTokens, clearAuth } from '@/store/auth';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -6,6 +6,7 @@ export class ApiClientError extends Error {
     constructor(
         message: string,
         public code: string,
+        public status?: number,
         public details?: unknown[]
     ) {
         super(message);
@@ -15,6 +16,53 @@ export class ApiClientError extends Error {
 
 export interface RequestOptions extends RequestInit {
     requiresAuth?: boolean;
+    skipRefresh?: boolean; // Prevent infinite refresh loops
+}
+
+// Track ongoing refresh to prevent concurrent refresh attempts
+let refreshPromise: Promise<boolean> | null = null;
+
+/**
+ * Attempt to refresh the access token
+ */
+async function attemptTokenRefresh(): Promise<boolean> {
+    // If already refreshing, wait for that to complete
+    if (refreshPromise) {
+        return refreshPromise;
+    }
+
+    const refreshTokenValue = getRefreshToken();
+    if (!refreshTokenValue) {
+        return false;
+    }
+
+    refreshPromise = (async () => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/v1/auth/refresh`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ refreshToken: refreshTokenValue }),
+            });
+
+            const data = await response.json();
+
+            if (data.success && data.data?.tokens) {
+                updateTokens(data.data.tokens);
+                return true;
+            } else {
+                // Refresh failed, clear auth state
+                clearAuth();
+                return false;
+            }
+        } catch (error) {
+            console.error('Token refresh failed:', error);
+            return false;
+        } finally {
+            refreshPromise = null;
+        }
+    })();
+
+    return refreshPromise;
 }
 
 /**
@@ -24,7 +72,7 @@ export async function apiClient<T>(
     endpoint: string,
     options: RequestOptions = {}
 ): Promise<T> {
-    const { requiresAuth = true, headers = {}, ...fetchOptions } = options;
+    const { requiresAuth = true, skipRefresh = false, headers = {}, ...fetchOptions } = options;
 
     const url = `${API_BASE_URL}${endpoint}`;
 
@@ -47,12 +95,43 @@ export async function apiClient<T>(
             headers: requestHeaders,
         });
 
+        // Handle 401 Unauthorized - attempt token refresh
+        if (response.status === 401 && requiresAuth && !skipRefresh) {
+            const refreshed = await attemptTokenRefresh();
+            
+            if (refreshed) {
+                // Retry the original request with new token
+                const newToken = getAccessToken();
+                if (newToken) {
+                    requestHeaders['Authorization'] = `Bearer ${newToken}`;
+                }
+                
+                const retryResponse = await fetch(url, {
+                    ...fetchOptions,
+                    headers: requestHeaders,
+                });
+                
+                const retryData = await retryResponse.json();
+                return retryData;
+            } else {
+                // Refresh failed, throw auth error
+                throw new ApiClientError(
+                    'Session expired. Please log in again.',
+                    'AUTH_EXPIRED',
+                    401
+                );
+            }
+        }
+
         const data = await response.json();
 
         // Return response regardless of status code
         // Let the application handle success/failure based on response content
         return data;
     } catch (error) {
+        if (error instanceof ApiClientError) {
+            throw error;
+        }
         // Only throw for network or parsing errors
         throw new ApiClientError(
             error instanceof Error ? error.message : 'Network error',
