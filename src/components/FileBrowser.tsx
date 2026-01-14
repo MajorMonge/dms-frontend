@@ -1,11 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useStore } from "@nanostores/react";
-import { Folder, File, MoreVertical, Upload, FolderPlus, Grid, List, HomeIcon, TrashIcon, DownloadIcon, BrushCleaning, Star, Pencil, FolderInput } from "lucide-react";
+import { Folder as FolderIcon, File, MoreVertical, Upload, FolderPlus, Grid, List, HomeIcon, TrashIcon, DownloadIcon, BrushCleaning, Star, Pencil, FolderInput, Loader2, AlertCircle } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { appPreferencesStore } from "@/store/app";
 import FileDetailsPanel from "./FileDetailsPanel";
+import { useDocuments, useDeleteDocument, getDownloadUrl } from "@/lib/api/documents";
+import { useFolders, useFolderBreadcrumbs, useCreateFolder, useDeleteFolder } from "@/lib/api/folders";
+import type { Document, Folder, Breadcrumb } from "@/types/api";
+import toast from "react-hot-toast";
 
 interface FileItem {
     id: string;
@@ -14,17 +18,8 @@ interface FileItem {
     size?: number;
     modified: string;
     extension?: string;
+    originalData?: Document | Folder;
 }
-
-const mockFiles: FileItem[] = [
-    { id: "1", name: "Documents", type: "folder", modified: "Jan 10, 2026" },
-    { id: "2", name: "Images", type: "folder", modified: "Jan 9, 2026" },
-    { id: "3", name: "Projects", type: "folder", modified: "Jan 8, 2026" },
-    { id: "4", name: "Annual Report.pdf", type: "file", size: 2400000, modified: "Jan 10, 2026", extension: "pdf" },
-    { id: "5", name: "Budget 2026.xlsx", type: "file", size: 156000, modified: "Jan 9, 2026", extension: "xlsx" },
-    { id: "6", name: "Presentation.pptx", type: "file", size: 5100000, modified: "Jan 7, 2026", extension: "pptx" },
-    { id: "7", name: "Meeting Notes.docx", type: "file", size: 89000, modified: "Jan 6, 2026", extension: "docx" },
-];
 
 function formatFileSize(bytes: number): string {
     if (bytes === 0) return "0 B";
@@ -65,12 +60,14 @@ function getFileIcon(extension?: string, size: "sm" | "md" = "md") {
 }
 
 // Reusable dropdown menu for file/folder actions
-function ItemDropdown({ onAction }: { onAction?: (action: string) => void }) {
+function ItemDropdown({ item, onAction }: { item: FileItem; onAction?: (action: string) => void }) {
     const handleClick = (action: string) => (e: React.MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
         onAction?.(action);
     };
+
+    const isFolder = item.type === "folder";
 
     return (
         <div className="dropdown dropdown-end" onClick={(e) => e.stopPropagation()}>
@@ -81,8 +78,8 @@ function ItemDropdown({ onAction }: { onAction?: (action: string) => void }) {
                 <li><a onClick={handleClick("details")}><File className="h-4 w-4" /> Details</a></li>
                 <li><a onClick={handleClick("rename")}><Pencil className="h-4 w-4" /> Rename</a></li>
                 <li><a onClick={handleClick("move")}><FolderInput className="h-4 w-4" /> Move</a></li>
-                <li><a onClick={handleClick("star")}><Star className="h-4 w-4" /> Star</a></li>
-                <li><a onClick={handleClick("download")}><DownloadIcon className="h-4 w-4" /> Download</a></li>
+                {!isFolder && <li><a onClick={handleClick("star")}><Star className="h-4 w-4" /> Star</a></li>}
+                {!isFolder && <li><a onClick={handleClick("download")}><DownloadIcon className="h-4 w-4" /> Download</a></li>}
                 <li className="border-t border-base-300 mt-1 pt-1">
                     <a onClick={handleClick("delete")} className="text-error"><TrashIcon className="h-4 w-4" /> Delete</a>
                 </li>
@@ -117,10 +114,10 @@ function GridCard({
         >
             <div className="card-body p-4 items-center text-center">
                 <div className="absolute top-2 right-2">
-                    <ItemDropdown onAction={onAction} />
+                    <ItemDropdown item={item} onAction={onAction} />
                 </div>
                 {isFolder ? (
-                    <Folder className="h-10 w-10 text-primary fill-primary/20" />
+                    <FolderIcon className="h-10 w-10 text-primary fill-primary/20" />
                 ) : (
                     getFileIcon(item.extension)
                 )}
@@ -158,7 +155,7 @@ function ListRow({
             onClick={onClick}
         >
             {isFolder ? (
-                <Folder className="h-6 w-6 text-primary fill-primary/20" />
+                <FolderIcon className="h-6 w-6 text-primary fill-primary/20" />
             ) : (
                 getFileIcon(item.extension, "sm")
             )}
@@ -169,7 +166,7 @@ function ListRow({
                 </span>
             )}
             <span className="text-sm text-base-content/50">{item.modified}</span>
-            <ItemDropdown onAction={onAction} />
+            <ItemDropdown item={item} onAction={onAction} />
         </motion.div>
     );
 }
@@ -182,25 +179,124 @@ export default function FileBrowser() {
     };
     
     const [selectedItems, setSelectedItems] = useState<string[]>([]);
-    const [currentPath, setCurrentPath] = useState<string[]>([]);
+    const [currentFolderId, setCurrentFolderId] = useState<string | undefined>(undefined);
     const [detailsItem, setDetailsItem] = useState<FileItem | null>(null);
     const [clickTimeout, setClickTimeout] = useState<NodeJS.Timeout | null>(null);
+    const [isCreatingFolder, setIsCreatingFolder] = useState(false);
+    const [newFolderName, setNewFolderName] = useState("");
 
-    const folders = mockFiles.filter((f) => f.type === "folder");
-    const files = mockFiles.filter((f) => f.type === "file");
+    // Fetch folders and documents for current location
+    const { 
+        data: foldersData, 
+        isLoading: foldersLoading, 
+        error: foldersError,
+        refetch: refetchFolders 
+    } = useFolders({ parentId: currentFolderId });
+    
+    const { 
+        data: documentsData, 
+        isLoading: documentsLoading, 
+        error: documentsError,
+        refetch: refetchDocuments 
+    } = useDocuments({ folderId: currentFolderId });
 
-    const toggleSelect = (id: string) => {
+    // Fetch breadcrumbs for current folder
+    const { data: breadcrumbsData } = useFolderBreadcrumbs(currentFolderId);
+
+    // Mutations
+    const createFolderMutation = useCreateFolder({
+        onSuccess: () => {
+            toast.success('Folder created');
+            setIsCreatingFolder(false);
+            setNewFolderName("");
+            refetchFolders();
+        },
+        onError: (error) => {
+            toast.error(error.message || 'Failed to create folder');
+        },
+    });
+
+    const deleteDocumentMutation = useDeleteDocument({
+        onSuccess: () => {
+            toast.success('Item moved to trash');
+            refetchDocuments();
+        },
+        onError: (error) => {
+            toast.error(error.message || 'Failed to delete');
+        },
+    });
+
+    const deleteFolderMutation = useDeleteFolder({
+        onSuccess: () => {
+            toast.success('Folder moved to trash');
+            refetchFolders();
+        },
+        onError: (error) => {
+            toast.error(error.message || 'Failed to delete folder');
+        },
+    });
+
+    // Transform API data to FileItem format
+    const folders: FileItem[] = useMemo(() => 
+        (foldersData?.folders || []).map((folder): FileItem => ({
+            id: folder.id,
+            name: folder.name,
+            type: "folder",
+            modified: new Date(folder.updatedAt).toLocaleDateString('en-US', { 
+                month: 'short', 
+                day: 'numeric', 
+                year: 'numeric' 
+            }),
+            originalData: folder,
+        })),
+        [foldersData]
+    );
+
+    const files: FileItem[] = useMemo(() => 
+        (documentsData?.documents || []).map((doc): FileItem => ({
+            id: doc.id,
+            name: doc.name,
+            type: "file",
+            size: doc.size,
+            extension: doc.extension,
+            modified: new Date(doc.updatedAt).toLocaleDateString('en-US', { 
+                month: 'short', 
+                day: 'numeric', 
+                year: 'numeric' 
+            }),
+            originalData: doc,
+        })),
+        [documentsData]
+    );
+
+    const isLoading = foldersLoading || documentsLoading;
+    const error = foldersError || documentsError;
+
+    const toggleSelect = useCallback((id: string) => {
         setSelectedItems((prev) =>
             prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
         );
-    };
+    }, []);
 
-    const navigateToFolder = (folderName: string) => {
-        setCurrentPath([...currentPath, folderName]);
+    const navigateToFolder = useCallback((folderId: string) => {
+        setCurrentFolderId(folderId);
         setSelectedItems([]);
-    };
+        setDetailsItem(null);
+    }, []);
 
-    const handleItemClick = (item: FileItem) => (e: React.MouseEvent) => {
+    const navigateToRoot = useCallback(() => {
+        setCurrentFolderId(undefined);
+        setSelectedItems([]);
+        setDetailsItem(null);
+    }, []);
+
+    const navigateToBreadcrumb = useCallback((breadcrumb: Breadcrumb) => {
+        setCurrentFolderId(breadcrumb.id);
+        setSelectedItems([]);
+        setDetailsItem(null);
+    }, []);
+
+    const handleItemClick = useCallback((item: FileItem) => (e: React.MouseEvent) => {
         if (e.shiftKey) {
             toggleSelect(item.id);
             return;
@@ -210,7 +306,7 @@ export default function FileBrowser() {
             if (e.detail === 2) {
                 if (clickTimeout) clearTimeout(clickTimeout);
                 setClickTimeout(null);
-                navigateToFolder(item.name);
+                navigateToFolder(item.id);
             } else {
                 if (clickTimeout) clearTimeout(clickTimeout);
                 const timeout = setTimeout(() => {
@@ -222,13 +318,46 @@ export default function FileBrowser() {
         } else {
             setDetailsItem(item);
         }
-    };
+    }, [clickTimeout, toggleSelect, navigateToFolder]);
 
-    const handleItemAction = (item: FileItem) => (action: string) => {
-        if (action === "details") {
-            setDetailsItem(item);
+    const handleItemAction = useCallback((item: FileItem) => async (action: string) => {
+        switch (action) {
+            case "details":
+                setDetailsItem(item);
+                break;
+            case "delete":
+                if (item.type === "folder") {
+                    deleteFolderMutation.mutate(item.id);
+                } else {
+                    deleteDocumentMutation.mutate({ id: item.id });
+                }
+                break;
+            case "download":
+                if (item.type === "file") {
+                    try {
+                        const { downloadUrl } = await getDownloadUrl(item.id);
+                        window.open(downloadUrl, '_blank');
+                    } catch (err) {
+                        toast.error('Failed to get download URL');
+                    }
+                }
+                break;
+            // TODO: Implement rename, move, star
+            default:
+                toast.error(`Action "${action}" not implemented yet`);
         }
-    };
+    }, [deleteDocumentMutation, deleteFolderMutation]);
+
+    const handleCreateFolder = useCallback(() => {
+        if (!newFolderName.trim()) {
+            toast.error('Please enter a folder name');
+            return;
+        }
+        createFolderMutation.mutate({
+            name: newFolderName.trim(),
+            parentId: currentFolderId,
+        });
+    }, [newFolderName, currentFolderId, createFolderMutation]);
 
     const renderItems = (items: FileItem[], gridCols: string) => {
         if (items.length === 0) return null;
@@ -282,10 +411,53 @@ export default function FileBrowser() {
                             <Upload className="h-4 w-4" />
                             Upload
                         </button>
-                        <button className="btn btn-ghost btn-sm gap-2">
-                            <FolderPlus className="h-4 w-4" />
-                            New Folder
-                        </button>
+                        {isCreatingFolder ? (
+                            <div className="flex gap-2 items-center">
+                                <input
+                                    type="text"
+                                    className="input input-sm input-bordered w-40"
+                                    placeholder="Folder name"
+                                    value={newFolderName}
+                                    onChange={(e) => setNewFolderName(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') handleCreateFolder();
+                                        if (e.key === 'Escape') {
+                                            setIsCreatingFolder(false);
+                                            setNewFolderName("");
+                                        }
+                                    }}
+                                    autoFocus
+                                />
+                                <button 
+                                    className="btn btn-sm btn-primary"
+                                    onClick={handleCreateFolder}
+                                    disabled={createFolderMutation.isPending}
+                                >
+                                    {createFolderMutation.isPending ? (
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                        'Create'
+                                    )}
+                                </button>
+                                <button 
+                                    className="btn btn-sm btn-ghost"
+                                    onClick={() => {
+                                        setIsCreatingFolder(false);
+                                        setNewFolderName("");
+                                    }}
+                                >
+                                    Cancel
+                                </button>
+                            </div>
+                        ) : (
+                            <button 
+                                className="btn btn-ghost btn-sm gap-2"
+                                onClick={() => setIsCreatingFolder(true)}
+                            >
+                                <FolderPlus className="h-4 w-4" />
+                                New Folder
+                            </button>
+                        )}
                     </div>
                     <div className="flex gap-1">
                         <button
@@ -310,19 +482,19 @@ export default function FileBrowser() {
                             <li>
                                 <a
                                     className="flex items-center gap-1 hover:text-primary cursor-pointer"
-                                    onClick={() => setCurrentPath([])}
+                                    onClick={navigateToRoot}
                                 >
                                     <HomeIcon className="h-4 w-4" />
                                     Home
                                 </a>
                             </li>
-                            {currentPath.map((segment, index) => (
-                                <li key={index}>
+                            {breadcrumbsData?.map((breadcrumb) => (
+                                <li key={breadcrumb.id}>
                                     <a
                                         className="hover:text-primary cursor-pointer"
-                                        onClick={() => setCurrentPath(currentPath.slice(0, index + 1))}
+                                        onClick={() => navigateToBreadcrumb(breadcrumb)}
                                     >
-                                        {segment}
+                                        {breadcrumb.name}
                                     </a>
                                 </li>
                             ))}
@@ -332,18 +504,63 @@ export default function FileBrowser() {
 
                 {/* Content */}
                 <div className="flex-1 overflow-y-auto p-4 min-h-0">
-                    {folders.length > 0 && (
-                        <div className="mb-6">
-                            <h3 className="text-sm font-medium text-base-content/70 mb-3">Folders</h3>
-                            {renderItems(folders, "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8")}
+                    {/* Loading State */}
+                    {isLoading && (
+                        <div className="flex items-center justify-center h-full">
+                            <div className="flex flex-col items-center gap-3">
+                                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                                <p className="text-base-content/60">Loading...</p>
+                            </div>
                         </div>
                     )}
 
-                    {files.length > 0 && (
-                        <div>
-                            <h3 className="text-sm font-medium text-base-content/70 mb-3">Files</h3>
-                            {renderItems(files, "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-8")}
+                    {/* Error State */}
+                    {error && !isLoading && (
+                        <div className="flex items-center justify-center h-full">
+                            <div className="flex flex-col items-center gap-3 text-error">
+                                <AlertCircle className="h-8 w-8" />
+                                <p>Failed to load files</p>
+                                <button 
+                                    className="btn btn-sm btn-outline btn-error"
+                                    onClick={() => {
+                                        refetchFolders();
+                                        refetchDocuments();
+                                    }}
+                                >
+                                    Try Again
+                                </button>
+                            </div>
                         </div>
+                    )}
+
+                    {/* Empty State */}
+                    {!isLoading && !error && folders.length === 0 && files.length === 0 && (
+                        <div className="flex items-center justify-center h-full">
+                            <div className="flex flex-col items-center gap-3 text-base-content/60">
+                                <FolderIcon className="h-16 w-16" />
+                                <p className="text-lg">This folder is empty</p>
+                                <p className="text-sm">Upload files or create a new folder to get started</p>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Content */}
+                    {!isLoading && !error && (
+                        <>
+                            {folders.length > 0 && (
+                                <div className="mb-6">
+                                    <h3 className="text-sm font-medium text-base-content/70 mb-3">Folders</h3>
+                                    {renderItems(folders, "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8")}
+                                </div>
+                            )}
+
+                            {files.length > 0 && (
+                                <div>
+                                    <h3 className="text-sm font-medium text-base-content/70 mb-3">Files</h3>
+                                    {renderItems(files, "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-8")}
+                                </div>
+                            )}
+                        </>
                     )}
                 </div>
 
