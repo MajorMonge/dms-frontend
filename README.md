@@ -1,4 +1,4 @@
-# SocialToast DMS - Frontend App
+# DMS - Frontend App
 
 A Progressive Web App (PWA) for a Document Management System with secure and scalable document storage on the cloud.
 
@@ -43,7 +43,7 @@ Run the development server:
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:4200](http://localhost:4200) with your browser to see the result.
 
 ## Environment Variables
 
