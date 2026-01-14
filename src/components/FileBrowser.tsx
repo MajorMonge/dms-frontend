@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
+import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { useStore } from "@nanostores/react";
 import { Folder as FolderIcon, File, MoreVertical, Upload, FolderPlus, Grid, List, HomeIcon, TrashIcon, DownloadIcon, BrushCleaning, Star, Pencil, FolderInput, Loader2, AlertCircle } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -173,6 +174,10 @@ function ListRow({
 }
 
 export default function FileBrowser() {
+    const router = useRouter();
+    const pathname = usePathname();
+    const searchParams = useSearchParams();
+    
     const preferences = useStore(appPreferencesStore);
     const viewMode = preferences.viewMode;
     const setViewMode = (mode: "grid" | "list") => {
@@ -180,12 +185,25 @@ export default function FileBrowser() {
     };
     
     const [selectedItems, setSelectedItems] = useState<string[]>([]);
-    const [currentFolderId, setCurrentFolderId] = useState<string | undefined>(undefined);
     const [detailsItem, setDetailsItem] = useState<FileItem | null>(null);
     const [clickTimeout, setClickTimeout] = useState<NodeJS.Timeout | null>(null);
     const [isCreateFolderModalOpen, setIsCreateFolderModalOpen] = useState(false);
 
+    // Get folder ID from URL search params
+    const currentFolderId = searchParams.get("folder") || undefined;
     const isAtRoot = !currentFolderId;
+
+    // Update URL when navigating
+    const updateUrl = useCallback((folderId: string | undefined) => {
+        const params = new URLSearchParams(searchParams.toString());
+        if (folderId) {
+            params.set("folder", folderId);
+        } else {
+            params.delete("folder");
+        }
+        const queryString = params.toString();
+        router.push(`${pathname}${queryString ? `?${queryString}` : ""}`, { scroll: false });
+    }, [router, pathname, searchParams]);
 
     const { 
         data: rootFoldersData, 
@@ -282,22 +300,22 @@ export default function FileBrowser() {
     }, []);
 
     const navigateToFolder = useCallback((folderId: string) => {
-        setCurrentFolderId(folderId);
+        updateUrl(folderId);
         setSelectedItems([]);
         setDetailsItem(null);
-    }, []);
+    }, [updateUrl]);
 
     const navigateToRoot = useCallback(() => {
-        setCurrentFolderId(undefined);
+        updateUrl(undefined);
         setSelectedItems([]);
         setDetailsItem(null);
-    }, []);
+    }, [updateUrl]);
 
     const navigateToBreadcrumb = useCallback((breadcrumb: Breadcrumb) => {
-        setCurrentFolderId(breadcrumb.id);
+        updateUrl(breadcrumb.id);
         setSelectedItems([]);
         setDetailsItem(null);
-    }, []);
+    }, [updateUrl]);
 
     const handleItemClick = useCallback((item: FileItem) => (e: React.MouseEvent) => {
         if (e.shiftKey) {
