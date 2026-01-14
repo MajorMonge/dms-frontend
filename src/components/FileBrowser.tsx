@@ -12,6 +12,7 @@ import { useFolders, useRootFolders, useFolderBreadcrumbs, useDeleteFolder } fro
 import type { Document, Folder, Breadcrumb } from "@/types/api";
 import toast from "react-hot-toast";
 import CreateFolderModal from "./CreateFolderModal";
+import RenameFolderModal from "./RenameFolderModal";
 
 interface FileItem {
     id: string;
@@ -188,6 +189,7 @@ export default function FileBrowser() {
     const [detailsItem, setDetailsItem] = useState<FileItem | null>(null);
     const [clickTimeout, setClickTimeout] = useState<NodeJS.Timeout | null>(null);
     const [isCreateFolderModalOpen, setIsCreateFolderModalOpen] = useState(false);
+    const [renameFolderItem, setRenameFolderItem] = useState<FileItem | null>(null);
 
     // Get folder ID from URL search params
     const currentFolderId = searchParams.get("folder") || undefined;
@@ -346,6 +348,14 @@ export default function FileBrowser() {
             case "details":
                 setDetailsItem(item);
                 break;
+            case "rename":
+                if (item.type === "folder") {
+                    setRenameFolderItem(item);
+                } else {
+                    // TODO: Implement document rename
+                    toast.error('Document rename not implemented yet');
+                }
+                break;
             case "delete":
                 if (item.type === "folder") {
                     deleteFolderMutation.mutate(item.id);
@@ -363,7 +373,7 @@ export default function FileBrowser() {
                     }
                 }
                 break;
-            // TODO: Implement rename, move, star
+            // TODO: Implement move, star
             default:
                 toast.error(`Action "${action}" not implemented yet`);
         }
@@ -581,6 +591,15 @@ export default function FileBrowser() {
                 isOpen={isCreateFolderModalOpen}
                 onClose={() => setIsCreateFolderModalOpen(false)}
                 parentId={currentFolderId}
+                onSuccess={() => refetchFolders()}
+            />
+
+            {/* Rename Folder Modal */}
+            <RenameFolderModal
+                isOpen={!!renameFolderItem}
+                onClose={() => setRenameFolderItem(null)}
+                folderId={renameFolderItem?.id || ''}
+                currentName={renameFolderItem?.name || ''}
                 onSuccess={() => refetchFolders()}
             />
         </div>
