@@ -14,6 +14,7 @@ import toast from "react-hot-toast";
 import CreateFolderModal from "./CreateFolderModal";
 import RenameFolderModal from "./RenameFolderModal";
 import DeleteFolderModal from "./DeleteFolderModal";
+import UploadModal from "./UploadModal";
 
 interface FileItem {
     id: string;
@@ -190,6 +191,7 @@ export default function FileBrowser() {
     const [detailsItem, setDetailsItem] = useState<FileItem | null>(null);
     const [clickTimeout, setClickTimeout] = useState<NodeJS.Timeout | null>(null);
     const [isCreateFolderModalOpen, setIsCreateFolderModalOpen] = useState(false);
+    const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
     const [renameFolderItem, setRenameFolderItem] = useState<FileItem | null>(null);
     const [deleteFolderItem, setDeleteFolderItem] = useState<FileItem | null>(null);
 
@@ -419,7 +421,10 @@ export default function FileBrowser() {
                 {/* Toolbar */}
                 <div className="bg-base-200 flex items-center justify-between rounded-t-md p-4 border-b border-base-300">
                     <div className="flex gap-2">
-                        <button className="btn btn-primary btn-sm gap-2">
+                        <button 
+                            className="btn btn-primary btn-sm gap-2"
+                            onClick={() => setIsUploadModalOpen(true)}
+                        >
                             <Upload className="h-4 w-4" />
                             Upload
                         </button>
@@ -584,6 +589,13 @@ export default function FileBrowser() {
                 onClose={() => setIsCreateFolderModalOpen(false)}
                 parentId={currentFolderId}
                 onSuccess={() => refetchFolders()}
+            />
+
+            {/* Upload Modal */}
+            <UploadModal
+                isOpen={isUploadModalOpen}
+                onClose={() => setIsUploadModalOpen(false)}
+                folderId={currentFolderId}
             />
 
             {/* Rename Folder Modal */}
