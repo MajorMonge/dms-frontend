@@ -68,7 +68,7 @@ export default function SideBarComponent({ isMobile = false }: SideBarProps) {
                 <Link 
                     href={href}
                     onClick={handleNavClick}
-                    className={`${active ? "menu-active" : ""} flex gap-2 items-center h-12`}
+                    className={`${active ? "menu-active bg-primary text-primary-content hover:bg-primary hover:text-primary-content" : ""} flex gap-2 items-center h-12`}
                 >
                     <motion.span layout className="flex items-center" aria-hidden={false}>
                         {icon}
@@ -102,7 +102,7 @@ export default function SideBarComponent({ isMobile = false }: SideBarProps) {
                 </div>
                 <div className="grow bg-base-100 shadow-sm rounded-box flex flex-col shrink-0">
                     <div className="flex-1 overflow-y-auto px-2 py-4">
-                        <ul className="menu menu-lg w-full gap-2 items-stretch">
+                        <ul className="menu menu-lg w-full gap-2 items-stretch ">
                             {menuItems.map((item) => (
                                 <MenuItemComponent
                                     key={item.href}
