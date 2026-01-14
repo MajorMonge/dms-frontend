@@ -159,3 +159,80 @@ export interface MutationResponse<T = { message?: string }> {
 export interface MessageResponse {
     message: string;
 }
+
+// ============= Document Types =============
+
+export interface Document {
+    id: string;
+    name: string;
+    originalName: string;
+    mimeType: string;
+    size: number;
+    path: string;
+    folderId: string | null;
+    userId: string;
+    ownerId: string;
+    extension: string;
+    tags: string[];
+    version: number;
+    isDeleted: boolean;
+    deletedAt?: string | null;
+    metadata?: Record<string, unknown>;
+    createdAt: string;
+    updatedAt: string;
+    downloadUrl?: string;
+}
+
+export interface Folder {
+    id: string;
+    name: string;
+    parentId: string | null;
+    userId: string;
+    ownerId: string;
+    path: string;
+    depth: number;
+    isDeleted: boolean;
+    deletedAt?: string | null;
+    metadata?: Record<string, unknown>;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface FolderWithCounts extends Folder {
+    documentCount: number;
+    subfolderCount: number;
+}
+
+export interface Breadcrumb {
+    id: string;
+    name: string;
+    path: string;
+}
+
+export interface Pagination {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+}
+
+export interface DocumentListResponse {
+    documents: Document[];
+    pagination: Pagination;
+}
+
+export interface FolderListResponse {
+    folders: Folder[];
+    pagination: Pagination;
+}
+
+export interface PresignedUploadResponse {
+    uploadUrl: string;
+    key: string;
+    expiresIn: number;
+}
+
+export interface DownloadUrlResponse {
+    downloadUrl: string;
+    expiresIn: number;
+}
