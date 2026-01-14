@@ -1,6 +1,6 @@
 "use client";
 
-import { X, Folder, File, Calendar, HardDrive, User, Tag, Download, Pencil, Trash2, Loader2 } from "lucide-react";
+import { X, Folder, File, Calendar, HardDrive, User, Tag, Download, Pencil, Trash2, Loader2, Scissors } from "lucide-react";
 import { motion } from "framer-motion";
 import { useState } from "react";
 import { downloadSingleFile } from "@/lib/download";
@@ -20,6 +20,7 @@ interface FileDetailsPanelProps {
     onClose: () => void;
     onRename?: (item: FileItem) => void;
     onDelete?: (item: FileItem) => void;
+    onSplitPdf?: (item: FileItem) => void;
 }
 
 function formatFileSize(bytes: number): string {
@@ -60,12 +61,13 @@ function getFileIcon(extension?: string) {
     return <File className={iconClass} />;
 }
 
-export default function FileDetailsPanel({ item, onClose, onRename, onDelete }: FileDetailsPanelProps) {
+export default function FileDetailsPanel({ item, onClose, onRename, onDelete, onSplitPdf }: FileDetailsPanelProps) {
     const [isDownloading, setIsDownloading] = useState(false);
 
     if (!item) return null;
 
     const isFolder = item.type === "folder";
+    const isPdf = !isFolder && item.extension?.toLowerCase() === "pdf";
 
     const detailItems = [
         { icon: Tag, label: "Type", value: isFolder ? "Folder" : item.extension?.toUpperCase() || "File" },
@@ -92,6 +94,12 @@ export default function FileDetailsPanel({ item, onClose, onRename, onDelete }: 
 
     const handleDelete = () => {
         onDelete?.(item);
+    };
+
+    const handleSplitPdf = () => {
+        if (isPdf) {
+            onSplitPdf?.(item);
+        }
     };
 
     return (
@@ -164,6 +172,15 @@ export default function FileDetailsPanel({ item, onClose, onRename, onDelete }: 
                                     <Download className="h-4 w-4" />
                                 )}
                                 {isDownloading ? 'Downloading...' : 'Download'}
+                            </button>
+                        )}
+                        {isPdf && (
+                            <button 
+                                className="btn btn-secondary btn-block btn-sm"
+                                onClick={handleSplitPdf}
+                            >
+                                <Scissors className="h-4 w-4" />
+                                Split PDF
                             </button>
                         )}
                         <button 
